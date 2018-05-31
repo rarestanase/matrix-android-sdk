@@ -22,19 +22,20 @@ import android.content.Context;
 import org.matrix.androidsdk.data.EventTimeline;
 import org.matrix.androidsdk.data.Room;
 import org.matrix.androidsdk.data.RoomAccountData;
-import org.matrix.androidsdk.data.RoomState;
 import org.matrix.androidsdk.data.RoomSummary;
 import org.matrix.androidsdk.rest.callback.SimpleApiCallback;
 import org.matrix.androidsdk.rest.model.Event;
 import org.matrix.androidsdk.rest.model.ReceiptData;
 import org.matrix.androidsdk.rest.model.RoomMember;
-import org.matrix.androidsdk.rest.model.ThirdPartyIdentifier;
 import org.matrix.androidsdk.rest.model.TokensChunkResponse;
 import org.matrix.androidsdk.rest.model.User;
+import org.matrix.androidsdk.rest.model.group.Group;
+import org.matrix.androidsdk.rest.model.pid.ThirdPartyIdentifier;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * An interface for storing and retrieving Matrix objects.
@@ -85,6 +86,13 @@ public interface IMXStore {
     boolean isReady();
 
     /**
+     * Check if the read receipts are ready to be used.
+     *
+     * @return true if they are ready.
+     */
+    boolean areReceiptsReady();
+
+    /**
      * @return true if the store is corrupted.
      */
     boolean isCorrupted();
@@ -92,6 +100,7 @@ public interface IMXStore {
     /**
      * Warn that the store data are corrupted.
      * It might append if an update request failed.
+     *
      * @param reason the corruption reason
      */
     void setCorrupted(String reason);
@@ -125,53 +134,121 @@ public interface IMXStore {
     void addMXStoreListener(IMXStoreListener listener);
 
     /**
-     * remive a MXStore listener.
+     * remove a MXStore listener.
      *
      * @param listener the listener
      */
     void removeMXStoreListener(IMXStoreListener listener);
 
     /**
-     * profile information
+     * @return the display name
      */
     String displayName();
 
-    void setDisplayName(String displayName);
+    /**
+     * Update the user display name
+     *
+     * @param displayName the displayname
+     * @param ts          the timestamp update
+     * @return true if there is an update
+     */
+    boolean setDisplayName(String displayName, long ts);
 
+    /**
+     * @return the avatar URL
+     */
     String avatarURL();
 
-    void setAvatarURL(String avatarURL);
+    /**
+     * Update the avatar URL
+     *
+     * @param avatarURL the new URL
+     * @param ts        the timestamp update
+     * @return true if there is an update
+     */
+    boolean setAvatarURL(String avatarURL, long ts);
 
+    /**
+     * @return the third party identifiers list
+     */
     List<ThirdPartyIdentifier> thirdPartyIdentifiers();
 
+    /**
+     * Update the third party identifiers list.
+     *
+     * @param identifiers the identifiers list
+     */
     void setThirdPartyIdentifiers(List<ThirdPartyIdentifier> identifiers);
 
+    /**
+     * Update the ignored user ids list.
+     *
+     * @param users the user ids list
+     */
     void setIgnoredUserIdsList(List<String> users);
 
+    /**
+     * Update the direct chat rooms list
+     *
+     * @param directChatRoomsDict the direct chats map
+     */
     void setDirectChatRoomsDict(Map<String, List<String>> directChatRoomsDict);
 
     /**
-     * getters.
+     * @return the known rooms list
      */
     Collection<Room> getRooms();
 
+    /**
+     * Retrieve a room from its room id
+     *
+     * @param roomId the room id
+     * @return the room if it exists
+     */
     Room getRoom(String roomId);
 
+    /**
+     * @return the known users lists
+     */
     Collection<User> getUsers();
 
+    /**
+     * Retrieves an user by its user id.
+     *
+     * @param userId the user id
+     * @return the user
+     */
     User getUser(String userId);
 
+    /**
+     * @return the ignored user ids list
+     */
     List<String> getIgnoredUserIdsList();
 
+    /**
+     * @return the direct chats rooms list
+     */
     Map<String, List<String>> getDirectChatRoomsDict();
 
     /**
-     * flush methods
+     * Flush an updated user.
+     *
+     * @param user the user
      */
     void storeUser(User user);
 
+    /**
+     * Flush an user from a room member.
+     *
+     * @param roomMember the room member
+     */
     void updateUserWithRoomMemberEvent(RoomMember roomMember);
 
+    /**
+     * Flush a room.
+     *
+     * @param room the room
+     */
     void storeRoom(Room room);
 
     /**
@@ -228,6 +305,13 @@ public interface IMXStore {
      * @param keepUnsent set to true to do not delete the unsent message
      */
     void deleteAllRoomMessages(String roomId, boolean keepUnsent);
+
+    /**
+     * Flush the room events.
+     *
+     * @param roomId the id of the room.
+     */
+    void flushRoomEvents(String roomId);
 
     /**
      * Delete the room from the storage.
@@ -310,7 +394,7 @@ public interface IMXStore {
     RoomSummary getSummary(String roomId);
 
     /**
-     * Flush a room summmary
+     * Flush a room summary
      *
      * @param summary the summary.
      */
@@ -322,15 +406,11 @@ public interface IMXStore {
     void flushSummaries();
 
     /**
-     * Store the summary for the given room id.
+     * Store a new summary.
      *
-     * @param roomId     the room id
-     * @param event      the latest event of the room
-     * @param roomState  the room state - used to display the event
-     * @param selfUserId our own user id - used to display the room name
-     * @return the new RoomSummary.
+     * @param summary the summary
      */
-    RoomSummary storeSummary(String roomId, Event event, RoomState roomState, String selfUserId);
+    void storeSummary(RoomSummary summary);
 
     /**
      * Store the room liveState.
@@ -344,14 +424,14 @@ public interface IMXStore {
      * The room states are built with several events.
      *
      * @param roomId the room id
-     * @param event the event
+     * @param event  the event
      */
     void storeRoomStateEvent(String roomId, Event event);
 
     /**
      * Retrieve the room state creation events
      *
-     * @param roomId the room id
+     * @param roomId   the room id
      * @param callback the asynchronous callback
      */
     void getRoomStateEvents(String roomId, SimpleApiCallback<List<Event>> callback);
@@ -453,4 +533,77 @@ public interface IMXStore {
      * @return the store stats
      */
     Map<String, Long> getStats();
+
+    /**
+     * Start a runnable from the store thread
+     *
+     * @param runnable the runnable to call
+     */
+    void post(Runnable runnable);
+
+    /**
+     * Store a group
+     *
+     * @param group the group to store
+     */
+    void storeGroup(Group group);
+
+    /**
+     * Flush a group in store.
+     *
+     * @param group the group
+     */
+    void flushGroup(Group group);
+
+    /**
+     * Delete a group
+     * @param groupId the group id to delete
+     */
+    void deleteGroup(String groupId);
+
+    /**
+     * Retrieve a group from its id.
+     *
+     * @param groupId the group id
+     * @return the group if it exists
+     */
+    Group getGroup(String groupId);
+
+    /**
+     * @return the stored groups
+     */
+    Collection<Group> getGroups();
+
+    /**
+     * Set the URL preview status
+     * @param value the URL preview status
+     */
+    void setURLPreviewEnabled(boolean value);
+
+    /**
+     * Tells if the global URL preview is enabled.
+     * @return true if it is enabled
+     */
+    boolean isURLPreviewEnabled();
+
+    /**
+     * Update the rooms list which don't have URL previews
+     * @param roomIds teh room ids list
+     */
+    void setRoomsWithoutURLPreview(Set<String> roomIds);
+
+    /**
+     * Set the user widgets
+     */
+    void setUserWidgets(Map<String, Object> contentDict);
+
+    /**
+     * Get the user widgets
+     */
+    Map<String, Object> getUserWidgets();
+
+    /**
+     * @return the room ids list which don't have URL preview enabled
+     */
+    Set<String> getRoomsWithoutURLPreviews();
 }

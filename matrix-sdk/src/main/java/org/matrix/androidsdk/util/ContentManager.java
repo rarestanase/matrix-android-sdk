@@ -16,15 +16,15 @@
 
 package org.matrix.androidsdk.util;
 
-import org.matrix.androidsdk.util.Log;
+import android.support.annotation.Nullable;
 
-import org.matrix.androidsdk.HomeserverConnectionConfig;
+import org.matrix.androidsdk.HomeServerConnectionConfig;
 
 /**
  * Class for accessing content from the current session.
  */
 public class ContentManager {
-    private static final String LOG_TAG = "ContentManager";
+    private static final String LOG_TAG = ContentManager.class.getSimpleName();
 
     public static final String MATRIX_CONTENT_URI_SCHEME = "mxc://";
 
@@ -34,16 +34,18 @@ public class ContentManager {
     public static final String URI_PREFIX_CONTENT_API = "/_matrix/media/v1/";
 
     // HS config
-    private HomeserverConnectionConfig mHsConfig;
+    private final HomeServerConnectionConfig mHsConfig;
 
     // the unsent events Manager
-    private UnsentEventsManager mUnsentEventsManager;
+    private final UnsentEventsManager mUnsentEventsManager;
 
     /**
      * Default constructor.
-     * @param hsConfig the HomeserverConnectionConfig to use
+     *
+     * @param hsConfig            the HomeserverConnectionConfig to use
+     * @param unsentEventsManager the unsent events manager
      */
-    public ContentManager(HomeserverConnectionConfig hsConfig, UnsentEventsManager unsentEventsManager) {
+    public ContentManager(HomeServerConnectionConfig hsConfig, UnsentEventsManager unsentEventsManager) {
         mHsConfig = hsConfig;
         mUnsentEventsManager = unsentEventsManager;
     }
@@ -51,7 +53,7 @@ public class ContentManager {
     /**
      * @return the hs config.
      */
-    public HomeserverConnectionConfig getHsConfig() {
+    public HomeServerConnectionConfig getHsConfig() {
         return mHsConfig;
     }
 
@@ -63,7 +65,8 @@ public class ContentManager {
     }
 
     /**
-     * Compute the identificon URL for an userId.
+     * Compute the identicon URL for an userId.
+     *
      * @param userId the user id.
      * @return the url
      */
@@ -84,32 +87,44 @@ public class ContentManager {
     }
 
     /**
-     * Get an actual URL for accessing the full-size image of the given content URI.
-     * @param contentUrl the mxc:// content URI
-     * @return the URL to access the described resource
+     * Check whether an url is a valid matrix content url.
+     *
+     * @param contentUrl the content URL (in the form of "mxc://...").
+     * @return true if contentUrl is valid.
      */
+    public boolean isValidMatrixContentUrl(String contentUrl) {
+        return (null != contentUrl && contentUrl.startsWith(MATRIX_CONTENT_URI_SCHEME));
+    }
+
+    /**
+     * Get the actual URL for accessing the full-size image of a Matrix media content URI.
+     *
+     * @param contentUrl the Matrix media content URI (in the form of "mxc://...").
+     * @return the URL to access the described resource, or null if the url is invalid.
+     */
+    @Nullable
     public String getDownloadableUrl(String contentUrl) {
-        if (contentUrl == null) return null;
-        if (contentUrl.startsWith(MATRIX_CONTENT_URI_SCHEME)) {
+        if (isValidMatrixContentUrl(contentUrl)) {
             String mediaServerAndId = contentUrl.substring(MATRIX_CONTENT_URI_SCHEME.length());
             return mHsConfig.getHomeserverUri().toString() + URI_PREFIX_CONTENT_API + "download/" + mediaServerAndId;
-        }
-        else {
-            return contentUrl;
+        } else {
+            // do not allow non-mxc content URLs: we should not be making requests out to whatever http urls people send us
+            return null;
         }
     }
 
     /**
-     * Get an actual URL for accessing the thumbnail image of the given content URI.
-     * @param contentUrl the mxc:// content URI
-     * @param width the desired width
-     * @param height the desired height
-     * @param method the desired scale method (METHOD_CROP or METHOD_SCALE)
-     * @return the URL to access the described resource
+     * Get the actual URL for accessing the thumbnail image of a given Matrix media content URI.
+     *
+     * @param contentUrl the Matrix media content URI (in the form of "mxc://...").
+     * @param width      the desired width
+     * @param height     the desired height
+     * @param method     the desired scale method (METHOD_CROP or METHOD_SCALE)
+     * @return the URL to access the described resource, or null if the url is invalid.
      */
+    @Nullable
     public String getDownloadableThumbnailUrl(String contentUrl, int width, int height, String method) {
-        if (contentUrl == null) return null;
-        if (contentUrl.startsWith(MATRIX_CONTENT_URI_SCHEME)) {
+        if (isValidMatrixContentUrl(contentUrl)) {
             String mediaServerAndId = contentUrl.substring(MATRIX_CONTENT_URI_SCHEME.length());
 
             // ignore the #auto pattern
@@ -124,14 +139,14 @@ public class ContentManager {
                 url += "thumbnail/";
             }
 
-            url +=  mediaServerAndId;
+            url += mediaServerAndId;
             url += "?width=" + width;
             url += "&height=" + height;
             url += "&method=" + method;
             return url;
-        }
-        else {
-            return contentUrl;
+        } else {
+            // do not allow non-mxc content URLs: we should not be making requests out to whatever http urls people send us
+            return null;
         }
     }
 }

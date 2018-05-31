@@ -16,6 +16,8 @@
 
 package org.matrix.androidsdk.data;
 
+import android.os.AsyncTask;
+import android.os.Looper;
 import android.text.TextUtils;
 
 import org.matrix.androidsdk.MXSession;
@@ -23,7 +25,8 @@ import org.matrix.androidsdk.MXSession;
 import org.matrix.androidsdk.rest.callback.ApiCallback;
 import org.matrix.androidsdk.rest.model.Event;
 import org.matrix.androidsdk.rest.model.MatrixError;
-import org.matrix.androidsdk.rest.model.RoomResponse;
+import org.matrix.androidsdk.rest.model.sync.RoomResponse;
+import org.matrix.androidsdk.util.Log;
 
 import java.util.Map;
 
@@ -33,7 +36,7 @@ import java.util.Map;
  */
 public class RoomPreviewData {
 
-    private static final String LOG_TAG = "RoomPreviewData";
+    private static final String LOG_TAG = RoomPreviewData.class.getSimpleName();
 
     // The id of the room to preview.
     private String mRoomId;
@@ -63,9 +66,11 @@ public class RoomPreviewData {
 
     /**
      * Create an RoomPreviewData instance
-     * @param session the session.
-     * @param roomId the room Id to preview
-     * @param eventId the event Id to preview (optional)
+     *
+     * @param session               the session.
+     * @param roomId                the room Id to preview
+     * @param eventId               the event Id to preview (optional)
+     * @param roomAlias             the room alias (optional)
      * @param emailInvitationParams the email invitation parameters (optional)
      */
     public RoomPreviewData(MXSession session, String roomId, String eventId, String roomAlias, Map<String, String> emailInvitationParams) {
@@ -90,6 +95,7 @@ public class RoomPreviewData {
 
     /**
      * Update the room state.
+     *
      * @param roomState the new roomstate
      */
     public void setRoomState(RoomState roomState) {
@@ -111,6 +117,7 @@ public class RoomPreviewData {
 
     /**
      * Set the room name.
+     *
      * @param aRoomName the new room name
      */
     public void setRoomName(String aRoomName) {
@@ -172,26 +179,51 @@ public class RoomPreviewData {
 
     /**
      * Attempt to get more information from the homeserver about the room.
+     *
      * @param apiCallback the callback when the operation is done.
      */
     public void fetchPreviewData(final ApiCallback<Void> apiCallback) {
         mSession.getRoomsApiClient().initialSync(mRoomId, new ApiCallback<RoomResponse>() {
             @Override
-            public void onSuccess(RoomResponse roomResponse) {
-                // save the initial sync response
-                mRoomResponse = roomResponse;
+            public void onSuccess(final RoomResponse roomResponse) {
+                AsyncTask<Void, Void, Void> task = new AsyncTask<Void, Void, Void>() {
+                    @Override
+                    protected Void doInBackground(Void... params) {
+                        // save the initial sync response
+                        mRoomResponse = roomResponse;
 
-                mRoomState = new RoomState();
-                mRoomState.roomId = mRoomId;
+                        mRoomState = new RoomState();
+                        mRoomState.roomId = mRoomId;
 
-                for(Event event : roomResponse.state) {
-                    mRoomState.applyState(event, EventTimeline.Direction.FORWARDS);
+                        for (Event event : roomResponse.state) {
+                            mRoomState.applyState(null, event, EventTimeline.Direction.FORWARDS);
+                        }
+
+                        mRoomName = mRoomState.getDisplayName(mSession.getMyUserId());
+                        mRoomAvatarUrl = mRoomState.getAvatarUrl();
+                        return null;
+                    }
+
+                    @Override
+                    protected void onPostExecute(Void args) {
+                        apiCallback.onSuccess(null);
+                    }
+                };
+                try {
+                    task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+                } catch (final Exception e) {
+                    Log.e(LOG_TAG, "## fetchPreviewData() failed " + e.getMessage());
+                    task.cancel(true);
+
+                    (new android.os.Handler(Looper.getMainLooper())).post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (null != apiCallback) {
+                                apiCallback.onUnexpectedError(e);
+                            }
+                        }
+                    });
                 }
-
-                mRoomName = mRoomState.getDisplayName(mSession.getMyUserId());
-                mRoomAvatarUrl = mRoomState.getAvatarUrl();
-
-                apiCallback.onSuccess(null);
             }
 
             @Override

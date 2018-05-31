@@ -22,74 +22,49 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Base64;
-import android.view.View;
-
-import org.matrix.androidsdk.crypto.MXCryptoError;
-import org.matrix.androidsdk.crypto.data.MXDeviceInfo;
-import org.matrix.androidsdk.crypto.data.MXUsersDevicesMap;
-import org.matrix.androidsdk.rest.callback.SimpleApiCallback;
-import org.matrix.androidsdk.util.Log;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import org.matrix.androidsdk.MXSession;
+import org.matrix.androidsdk.crypto.MXCryptoError;
+import org.matrix.androidsdk.crypto.data.MXDeviceInfo;
+import org.matrix.androidsdk.crypto.data.MXUsersDevicesMap;
 import org.matrix.androidsdk.data.Room;
 import org.matrix.androidsdk.data.RoomState;
+import org.matrix.androidsdk.data.store.IMXStore;
 import org.matrix.androidsdk.listeners.MXEventListener;
 import org.matrix.androidsdk.rest.callback.ApiCallback;
+import org.matrix.androidsdk.rest.callback.SimpleApiCallback;
 import org.matrix.androidsdk.rest.client.CallRestClient;
+import org.matrix.androidsdk.rest.model.CreateRoomParams;
 import org.matrix.androidsdk.rest.model.Event;
 import org.matrix.androidsdk.rest.model.EventContent;
 import org.matrix.androidsdk.rest.model.MatrixError;
 import org.matrix.androidsdk.rest.model.RoomMember;
 import org.matrix.androidsdk.util.JsonUtils;
+import org.matrix.androidsdk.util.Log;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
 public class MXCallsManager {
-    private static final String LOG_TAG = "MXCallsManager";
-
-    public interface MXCallsManagerListener {
-        /**
-         * Called when there is an incoming call within the room.
-         * @param call the incoming call
-         * @param unknownDevices the unknown e2e devices list
-         */
-        void onIncomingCall(IMXCall call, MXUsersDevicesMap<MXDeviceInfo> unknownDevices);
-
-        /**
-         * Called when a called has been hung up
-         * @param call the incoming call
-         */
-        void onCallHangUp(IMXCall call);
-
-        /**
-         * A voip conference started in a room.
-         * @param roomId the room id
-         */
-        void onVoipConferenceStarted(String roomId);
-
-        /**
-         * A voip conference finished in a room.
-         * @param roomId the room id
-         */
-        void onVoipConferenceFinished(String roomId);
-    }
+    private static final String LOG_TAG = MXCallsManager.class.getSimpleName();
 
     /**
      * Defines the call classes.
      */
     public enum CallClass {
-        CHROME_CLASS,
-        JINGLE_CLASS,
+        // disabled because of https://github.com/vector-im/riot-android/issues/1660
+        //CHROME_CLASS,
+        WEBRTC_CLASS,
         DEFAULT_CLASS
     }
 
@@ -101,22 +76,52 @@ public class MXCallsManager {
     private Timer mTurnServerTimer = null;
     private boolean mSuspendTurnServerRefresh = false;
 
-    private CallClass mPreferredCallClass = CallClass.JINGLE_CLASS;
+    private CallClass mPreferredCallClass = CallClass.WEBRTC_CLASS;
 
     // active calls
     private final HashMap<String, IMXCall> mCallsByCallId = new HashMap<>();
 
     // listeners
-    private final ArrayList<MXCallsManagerListener> mListeners = new ArrayList<>();
+    private final Set<IMXCallsManagerListener> mListeners = new HashSet<>();
 
     // incoming calls
-    private final ArrayList<String> mxPendingIncomingCallId = new ArrayList<>();
+    private final Set<String> mxPendingIncomingCallId = new HashSet<>();
 
     // UI handler
     private final Handler mUIThreadHandler;
 
     /**
+     * To create an outgoing call
+     * 1- CallsManager.createCallInRoom()
+     * 2- on success, IMXCall.createCallView
+     * 3- IMXCallListener.onCallViewCreated(callview) -> insert the callview
+     * 4- IMXCallListener.onCallReady() -> IMXCall.placeCall()
+     * 5- the call states should follow theses steps
+     *    CALL_STATE_WAIT_LOCAL_MEDIA
+     *    CALL_STATE_WAIT_CREATE_OFFER
+     *    CALL_STATE_INVITE_SENT
+     *    CALL_STATE_RINGING
+     * 6- the callee accepts the call
+     *    CALL_STATE_CONNECTING
+     *    CALL_STATE_CONNECTED
+     *
+     * To manage an incoming call
+     * 1- IMXCall.createCallView
+     * 2- IMXCallListener.onCallViewCreated(callview) -> insert the callview
+     * 3- IMXCallListener.onCallReady(), IMXCall.launchIncomingCall()
+     * 4- the call states should follow theses steps
+     *    CALL_STATE_WAIT_LOCAL_MEDIA
+     *    CALL_STATE_RINGING
+     * 5- The user accepts the call, IMXCall.answer()
+     * 6- the states should be
+     *    CALL_STATE_CREATE_ANSWER
+     *    CALL_STATE_CONNECTING
+     *    CALL_STATE_CONNECTED
+     */
+
+    /**
      * Constructor
+     *
      * @param session the session
      * @param context the context
      */
@@ -139,7 +144,8 @@ public class MXCallsManager {
 
                         if (TextUtils.equals(eventContent.membership, RoomMember.MEMBERSHIP_LEAVE)) {
                             dispatchOnVoipConferenceFinished(event.roomId);
-                        } if (TextUtils.equals(eventContent.membership, RoomMember.MEMBERSHIP_JOIN)) {
+                        }
+                        if (TextUtils.equals(eventContent.membership, RoomMember.MEMBERSHIP_JOIN)) {
                             dispatchOnVoipConferenceStarted(event.roomId);
                         }
                     }
@@ -154,7 +160,7 @@ public class MXCallsManager {
      * @return true if the call feature is supported
      */
     public boolean isSupported() {
-        return MXChromeCall.isSupported() || MXJingleCall.isSupported(mContext);
+        return /*MXChromeCall.isSupported() || */ MXWebRtcCall.isSupported(mContext);
     }
 
     /**
@@ -163,12 +169,12 @@ public class MXCallsManager {
     public Collection<CallClass> supportedClass() {
         ArrayList<CallClass> list = new ArrayList<>();
 
-        if (MXChromeCall.isSupported()) {
+        /*if (MXChromeCall.isSupported()) {
             list.add(CallClass.CHROME_CLASS);
-        }
+        }*/
 
-        if (MXJingleCall.isSupported(mContext)) {
-            list.add(CallClass.JINGLE_CLASS);
+        if (MXWebRtcCall.isSupported(mContext)) {
+            list.add(CallClass.WEBRTC_CLASS);
         }
 
         Log.d(LOG_TAG, "supportedClass " + list);
@@ -184,12 +190,12 @@ public class MXCallsManager {
 
         boolean isUpdatable = false;
 
-        if (callClass == CallClass.CHROME_CLASS) {
+        /*if (callClass == CallClass.CHROME_CLASS) {
             isUpdatable = MXChromeCall.isSupported();
-        }
+        }*/
 
-        if (callClass == CallClass.JINGLE_CLASS) {
-            isUpdatable = MXJingleCall.isSupported(mContext);
+        if (callClass == CallClass.WEBRTC_CLASS) {
+            isUpdatable = MXWebRtcCall.isSupported(mContext);
         }
 
         if (isUpdatable) {
@@ -199,6 +205,7 @@ public class MXCallsManager {
 
     /**
      * create a new call
+     *
      * @param callId the call Id (null to use a default value)
      * @return the IMXCall
      */
@@ -208,16 +215,16 @@ public class MXCallsManager {
         IMXCall call = null;
 
         // default
-        if (((CallClass.CHROME_CLASS == mPreferredCallClass) || (CallClass.DEFAULT_CLASS == mPreferredCallClass)) && MXChromeCall.isSupported()) {
+        /*if (((CallClass.CHROME_CLASS == mPreferredCallClass) || (CallClass.DEFAULT_CLASS == mPreferredCallClass)) && MXChromeCall.isSupported()) {
             call = new MXChromeCall(mSession, mContext, getTurnServer());
-        }
+        }*/
 
-        // Jingle
+        // webrtc
         if (null == call) {
             try {
-                call = new MXJingleCall(mSession, mContext, getTurnServer());
+                call = new MXWebRtcCall(mSession, mContext, getTurnServer());
             } catch (Exception e) {
-                Log.e(LOG_TAG, "createCall " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "createCall " + e.getMessage());
             }
         }
 
@@ -231,6 +238,7 @@ public class MXCallsManager {
 
     /**
      * Search a call from its dedicated room id.
+     *
      * @param roomId the room id
      * @return the IMXCall if it exists
      */
@@ -241,10 +249,10 @@ public class MXCallsManager {
             calls = new ArrayList<>(mCallsByCallId.values());
         }
 
-        for(IMXCall call : calls) {
+        for (IMXCall call : calls) {
             if (TextUtils.equals(roomId, call.getRoom().getRoomId())) {
                 if (TextUtils.equals(call.getCallState(), IMXCall.CALL_STATE_ENDED)) {
-                    Log.d(LOG_TAG, "## getCallWithRoomId() : the call " +  call.getCallId() + " has been stopped");
+                    Log.d(LOG_TAG, "## getCallWithRoomId() : the call " + call.getCallId() + " has been stopped");
                     synchronized (this) {
                         mCallsByCallId.remove(call.getCallId());
                     }
@@ -259,6 +267,7 @@ public class MXCallsManager {
 
     /**
      * Returns the IMXCall from its callId.
+     *
      * @param callId the call Id
      * @return the IMXCall if it exists
      */
@@ -268,6 +277,7 @@ public class MXCallsManager {
 
     /**
      * Returns the IMXCall from its callId.
+     *
      * @param callId the call Id
      * @param create create the IMXCall if it does not exist
      * @return the IMXCall if it exists
@@ -306,7 +316,9 @@ public class MXCallsManager {
     }
 
     /**
-     * Tell if a call is in progress
+     * Tell if a call is in progress.
+     *
+     * @param call the call
      * @return true if the call is in progress
      */
     public static boolean isCallInProgress(IMXCall call) {
@@ -317,13 +329,12 @@ public class MXCallsManager {
             res =
                     TextUtils.equals(callState, IMXCall.CALL_STATE_CREATED) ||
                             TextUtils.equals(callState, IMXCall.CALL_STATE_CREATING_CALL_VIEW) ||
-                            TextUtils.equals(callState, IMXCall.CALL_STATE_FLEDGLING) ||
+                            TextUtils.equals(callState, IMXCall.CALL_STATE_READY) ||
                             TextUtils.equals(callState, IMXCall.CALL_STATE_WAIT_LOCAL_MEDIA) ||
                             TextUtils.equals(callState, IMXCall.CALL_STATE_WAIT_CREATE_OFFER) ||
                             TextUtils.equals(callState, IMXCall.CALL_STATE_INVITE_SENT) ||
                             TextUtils.equals(callState, IMXCall.CALL_STATE_RINGING) ||
                             TextUtils.equals(callState, IMXCall.CALL_STATE_CREATE_ANSWER) ||
-                            TextUtils.equals(callState, IMXCall.CALL_STATE_RINGING) ||
                             TextUtils.equals(callState, IMXCall.CALL_STATE_CONNECTING) ||
                             TextUtils.equals(callState, IMXCall.CALL_STATE_CONNECTED);
         }
@@ -340,7 +351,7 @@ public class MXCallsManager {
 
             Set<String> callIds = mCallsByCallId.keySet();
 
-            for(String callId : callIds) {
+            for (String callId : callIds) {
                 IMXCall call = mCallsByCallId.get(callId);
 
                 if (TextUtils.equals(call.getCallState(), IMXCall.CALL_STATE_ENDED)) {
@@ -363,9 +374,11 @@ public class MXCallsManager {
 
     /**
      * Manage the call events.
+     *
+     * @param store the dedicated store
      * @param event the call event.
      */
-    public void handleCallEvent(final Event event) {
+    public void handleCallEvent(final IMXStore store, final Event event) {
         if (event.isCallEvent() && isSupported()) {
             Log.d(LOG_TAG, "handleCallEvent " + event.getType());
 
@@ -375,7 +388,7 @@ public class MXCallsManager {
                 @Override
                 public void run() {
                     boolean isMyEvent = TextUtils.equals(event.getSender(), mSession.getMyUserId());
-                    Room room = mSession.getDataHandler().getRoom(event.roomId);
+                    Room room = mSession.getDataHandler().getRoom(store, event.roomId, true);
 
                     String callId = null;
                     JsonObject eventContent = null;
@@ -397,7 +410,7 @@ public class MXCallsManager {
                             }
 
                             // ignore older call messages
-                            if (lifeTime < 30000) {
+                            if (lifeTime < MXCall.CALL_TIMEOUT_MS) {
                                 // create the call only it is triggered from someone else
                                 IMXCall call = getCallWithCallId(callId, !isMyEvent);
 
@@ -410,7 +423,6 @@ public class MXCallsManager {
 
                                     if (!isMyEvent) {
                                         call.prepareIncomingCall(eventContent, callId, null);
-                                        call.setIsIncoming(true);
                                         mxPendingIncomingCallId.add(callId);
                                     } else {
                                         call.handleCallEvent(event);
@@ -490,7 +502,7 @@ public class MXCallsManager {
      * check if there is a pending incoming call
      */
     public void checkPendingIncomingCalls() {
-        Log.d(LOG_TAG, "checkPendingIncomingCalls");
+        //Log.d(LOG_TAG, "checkPendingIncomingCalls");
 
         mUIThreadHandler.post(new Runnable() {
             @Override
@@ -597,10 +609,11 @@ public class MXCallsManager {
      * ----> the call signaling room is created (or retrieved) with the conference
      * ----> and the call is started
      *
-     * @param roomId the room roomId
+     * @param roomId   the room roomId
+     * @param isVideo  true to start a video call
      * @param callback the async callback
      */
-    public void createCallInRoom(final String roomId, final ApiCallback<IMXCall> callback) {
+    public void createCallInRoom(final String roomId, final boolean isVideo, final ApiCallback<IMXCall> callback) {
         Log.d(LOG_TAG, "createCallInRoom in " + roomId);
 
         final Room room = mSession.getDataHandler().getRoom(roomId);
@@ -628,6 +641,8 @@ public class MXCallsManager {
                                 public void onSuccess(Void anything) {
                                     final IMXCall call = getCallWithCallId(null, true);
                                     call.setRooms(room, room);
+                                    call.setIsVideo(isVideo);
+                                    dispatchOnOutgoingCall(call);
 
                                     if (null != callback) {
                                         mUIThreadHandler.post(new Runnable() {
@@ -662,6 +677,8 @@ public class MXCallsManager {
                             });
                         } else {
                             final IMXCall call = getCallWithCallId(null, true);
+                            call.setIsVideo(isVideo);
+                            dispatchOnOutgoingCall(call);
                             call.setRooms(room, room);
 
                             if (null != callback) {
@@ -690,6 +707,8 @@ public class MXCallsManager {
                                         final IMXCall call = getCallWithCallId(null, true);
                                         call.setRooms(room, conferenceRoom);
                                         call.setIsConference(true);
+                                        call.setIsVideo(isVideo);
+                                        dispatchOnOutgoingCall(call);
 
                                         if (null != callback) {
                                             mUIThreadHandler.post(new Runnable() {
@@ -703,7 +722,7 @@ public class MXCallsManager {
 
                                     @Override
                                     public void onNetworkError(Exception e) {
-                                        Log.d(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getLocalizedMessage());
+                                        Log.d(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getMessage());
 
                                         if (null != callback) {
                                             callback.onNetworkError(e);
@@ -712,7 +731,7 @@ public class MXCallsManager {
 
                                     @Override
                                     public void onMatrixError(MatrixError e) {
-                                        Log.d(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getLocalizedMessage());
+                                        Log.d(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getMessage());
 
 
                                         if (null != callback) {
@@ -722,7 +741,7 @@ public class MXCallsManager {
 
                                     @Override
                                     public void onUnexpectedError(Exception e) {
-                                        Log.d(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getLocalizedMessage());
+                                        Log.d(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getMessage());
 
                                         if (null != callback) {
                                             callback.onUnexpectedError(e);
@@ -733,7 +752,7 @@ public class MXCallsManager {
 
                             @Override
                             public void onNetworkError(Exception e) {
-                                Log.d(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getLocalizedMessage());
+                                Log.d(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getMessage());
 
                                 if (null != callback) {
                                     callback.onNetworkError(e);
@@ -742,7 +761,7 @@ public class MXCallsManager {
 
                             @Override
                             public void onMatrixError(MatrixError e) {
-                                Log.d(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getLocalizedMessage());
+                                Log.d(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getMessage());
 
                                 if (null != callback) {
                                     callback.onMatrixError(e);
@@ -751,7 +770,7 @@ public class MXCallsManager {
 
                             @Override
                             public void onUnexpectedError(Exception e) {
-                                Log.d(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getLocalizedMessage());
+                                Log.d(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getMessage());
 
                                 if (null != callback) {
                                     callback.onUnexpectedError(e);
@@ -846,20 +865,38 @@ public class MXCallsManager {
             public void run() {
                 mCallResClient.getTurnServer(new ApiCallback<JsonObject>() {
                     private void restartAfter(int msDelay) {
-                        if (null != mTurnServerTimer) {
-                            mTurnServerTimer.cancel();
-                        }
-
-                        mTurnServerTimer = new Timer();
-                        mTurnServerTimer.schedule(new TimerTask() {
-                            @Override
-                            public void run() {
+                        // reported by GA
+                        // "ttl" seems invalid
+                        if (msDelay <= 0) {
+                            Log.e(LOG_TAG, "## refreshTurnServer() : invalid delay " + msDelay);
+                        } else {
+                            if (null != mTurnServerTimer) {
                                 mTurnServerTimer.cancel();
-                                mTurnServerTimer = null;
+                            }
 
+                            try {
+                                mTurnServerTimer = new Timer();
+                                mTurnServerTimer.schedule(new TimerTask() {
+                                    @Override
+                                    public void run() {
+                                        if (mTurnServerTimer != null) {
+                                            mTurnServerTimer.cancel();
+                                            mTurnServerTimer = null;
+                                        }
+
+                                        refreshTurnServer();
+                                    }
+                                }, msDelay);
+                            } catch (Throwable e) {
+                                Log.e(LOG_TAG, "## refreshTurnServer() failed to start the timer");
+
+                                if (null != mTurnServerTimer) {
+                                    mTurnServerTimer.cancel();
+                                    mTurnServerTimer = null;
+                                }
                                 refreshTurnServer();
                             }
-                        }, msDelay);
+                        }
                     }
 
                     @Override
@@ -886,8 +923,8 @@ public class MXCallsManager {
                                     Log.e(LOG_TAG, "Fail to retrieve ttl " + e.getMessage());
                                 }
 
-                                Log.d(LOG_TAG, "## refreshTurnServer () : onSuccess : retry after " + ttl + "ms");
-                                restartAfter(ttl);
+                                Log.d(LOG_TAG, "## refreshTurnServer () : onSuccess : retry after " + ttl + " seconds");
+                                restartAfter(ttl * 1000);
                             }
                         }
                     }
@@ -900,7 +937,7 @@ public class MXCallsManager {
 
                     @Override
                     public void onMatrixError(MatrixError e) {
-                        Log.e(LOG_TAG, "## refreshTurnServer () : onMatrixError() : " + e.errcode );
+                        Log.e(LOG_TAG, "## refreshTurnServer () : onMatrixError() : " + e.errcode);
 
                         if (TextUtils.equals(e.errcode, MatrixError.LIMIT_EXCEEDED) && (null != e.retry_after_ms)) {
                             Log.e(LOG_TAG, "## refreshTurnServer () : onMatrixError() : retry after " + e.retry_after_ms + " ms");
@@ -930,8 +967,10 @@ public class MXCallsManager {
     private static final String USER_PREFIX = "fs_";
     private static final String DOMAIN = "matrix.org";
     private static final HashMap<String, String> mConferenceUserIdByRoomId = new HashMap<>();
+
     /**
      * Return the id of the conference user dedicated for a room Id
+     *
      * @param roomId the room id
      * @return the conference user id
      */
@@ -968,6 +1007,7 @@ public class MXCallsManager {
 
     /**
      * Test if the provided user is a valid conference user Id
+     *
      * @param userId the user id to test
      * @return true if it is a valid conference user id
      */
@@ -997,7 +1037,8 @@ public class MXCallsManager {
     /**
      * Invite the conference user to a room.
      * It is mandatory before starting a conference call.
-     * @param room the room
+     *
+     * @param room     the room
      * @param callback the async callback
      */
     private void inviteConferenceUser(final Room room, final ApiCallback<Void> callback) {
@@ -1020,7 +1061,8 @@ public class MXCallsManager {
 
     /**
      * Get the room with the conference user dedicated for the passed room.
-     * @param roomId the room id.
+     *
+     * @param roomId   the room id.
      * @param callback the async callback.
      */
     private void getConferenceUserRoom(final String roomId, final ApiCallback<Room> callback) {
@@ -1032,7 +1074,7 @@ public class MXCallsManager {
         Collection<Room> rooms = mSession.getDataHandler().getStore().getRooms();
 
         // Use an existing 1:1 with the conference user; else make one
-        for(Room room : rooms) {
+        for (Room room : rooms) {
             if (room.isConferenceUserRoom() && (2 == room.getMembers().size()) && (null != room.getMember(conferenceUserId))) {
                 conferenceRoom = room;
                 break;
@@ -1054,9 +1096,9 @@ public class MXCallsManager {
         } else {
             Log.d(LOG_TAG, "getConferenceUserRoom : create the room");
 
-            HashMap<String, Object> params = new HashMap<>();
-            params.put("preset", "private_chat");
-            params.put("invite", Arrays.asList(conferenceUserId));
+            CreateRoomParams params = new CreateRoomParams();
+            params.preset = CreateRoomParams.PRESET_PRIVATE_CHAT;
+            params.invite = Arrays.asList(conferenceUserId);
 
             mSession.createRoom(params, new ApiCallback<String>() {
                 @Override
@@ -1080,13 +1122,13 @@ public class MXCallsManager {
 
                 @Override
                 public void onMatrixError(MatrixError e) {
-                    Log.d(LOG_TAG, "getConferenceUserRoom : failed " + e.getLocalizedMessage());
+                    Log.d(LOG_TAG, "getConferenceUserRoom : failed " + e.getMessage());
                     callback.onMatrixError(e);
                 }
 
                 @Override
                 public void onUnexpectedError(Exception e) {
-                    Log.d(LOG_TAG, "getConferenceUserRoom : failed " + e.getLocalizedMessage());
+                    Log.d(LOG_TAG, "getConferenceUserRoom : failed " + e.getMessage());
                     callback.onUnexpectedError(e);
                 }
             });
@@ -1099,23 +1141,23 @@ public class MXCallsManager {
 
     /**
      * Add a listener
+     *
      * @param listener the listener to add
      */
-    public void addListener(MXCallsManagerListener listener) {
+    public void addListener(IMXCallsManagerListener listener) {
         if (null != listener) {
             synchronized (this) {
-                if (mListeners.indexOf(listener) < 0) {
-                    mListeners.add(listener);
-                }
+                mListeners.add(listener);
             }
         }
     }
 
     /**
      * Remove a listener
+     *
      * @param listener the listener to remove
      */
-    public void removeListener(MXCallsManagerListener listener) {
+    public void removeListener(IMXCallsManagerListener listener) {
         if (null != listener) {
             synchronized (this) {
                 mListeners.remove(listener);
@@ -1126,11 +1168,11 @@ public class MXCallsManager {
     /**
      * @return a copy of the listeners
      */
-    private List<MXCallsManagerListener> getListeners() {
-        ArrayList<MXCallsManagerListener> listeners;
+    private Collection<IMXCallsManagerListener> getListeners() {
+        Collection<IMXCallsManagerListener> listeners;
 
         synchronized (this) {
-            listeners = new ArrayList<>(mListeners);
+            listeners = new HashSet<>(mListeners);
         }
 
         return listeners;
@@ -1138,15 +1180,16 @@ public class MXCallsManager {
 
     /**
      * dispatch the onIncomingCall event to the listeners
-     * @param call the call
+     *
+     * @param call           the call
      * @param unknownDevices the unknown e2e devices list.
      */
     private void dispatchOnIncomingCall(IMXCall call, final MXUsersDevicesMap<MXDeviceInfo> unknownDevices) {
         Log.d(LOG_TAG, "dispatchOnIncomingCall " + call.getCallId());
 
-        List<MXCallsManagerListener> listeners = getListeners();
+        Collection<IMXCallsManagerListener> listeners = getListeners();
 
-        for(MXCallsManagerListener l : listeners) {
+        for (IMXCallsManagerListener l : listeners) {
             try {
                 l.onIncomingCall(call, unknownDevices);
             } catch (Exception e) {
@@ -1156,15 +1199,35 @@ public class MXCallsManager {
     }
 
     /**
+     * dispatch the call creation to the listeners
+     *
+     * @param call the call
+     */
+    private void dispatchOnOutgoingCall(IMXCall call) {
+        Log.d(LOG_TAG, "dispatchOnOutgoingCall " + call.getCallId());
+
+        Collection<IMXCallsManagerListener> listeners = getListeners();
+
+        for (IMXCallsManagerListener l : listeners) {
+            try {
+                l.onOutgoingCall(call);
+            } catch (Exception e) {
+                Log.e(LOG_TAG, "dispatchOnOutgoingCall " + e.getMessage());
+            }
+        }
+    }
+
+    /**
      * dispatch the onCallHangUp event to the listeners
+     *
      * @param call the call
      */
     private void dispatchOnCallHangUp(IMXCall call) {
         Log.d(LOG_TAG, "dispatchOnCallHangUp");
 
-        List<MXCallsManagerListener> listeners = getListeners();
+        Collection<IMXCallsManagerListener> listeners = getListeners();
 
-        for(MXCallsManagerListener l : listeners) {
+        for (IMXCallsManagerListener l : listeners) {
             try {
                 l.onCallHangUp(call);
             } catch (Exception e) {
@@ -1175,14 +1238,15 @@ public class MXCallsManager {
 
     /**
      * dispatch the onVoipConferenceStarted event to the listeners
+     *
      * @param roomId the room Id
      */
     private void dispatchOnVoipConferenceStarted(String roomId) {
         Log.d(LOG_TAG, "dispatchOnVoipConferenceStarted : " + roomId);
 
-        List<MXCallsManagerListener> listeners = getListeners();
+        Collection<IMXCallsManagerListener> listeners = getListeners();
 
-        for(MXCallsManagerListener l : listeners) {
+        for (IMXCallsManagerListener l : listeners) {
             try {
                 l.onVoipConferenceStarted(roomId);
             } catch (Exception e) {
@@ -1193,20 +1257,20 @@ public class MXCallsManager {
 
     /**
      * dispatch the onVoipConferenceFinished event to the listeners
+     *
      * @param roomId the room Id
      */
     private void dispatchOnVoipConferenceFinished(String roomId) {
         Log.d(LOG_TAG, "onVoipConferenceFinished : " + roomId);
 
-        List<MXCallsManagerListener> listeners = getListeners();
+        Collection<IMXCallsManagerListener> listeners = getListeners();
 
-        for(MXCallsManagerListener l : listeners) {
-                try {
-                    l.onVoipConferenceFinished(roomId);
-                } catch (Exception e) {
-                    Log.e(LOG_TAG, "dispatchOnVoipConferenceFinished " + e.getMessage());
-                }
+        for (IMXCallsManagerListener l : listeners) {
+            try {
+                l.onVoipConferenceFinished(roomId);
+            } catch (Exception e) {
+                Log.e(LOG_TAG, "dispatchOnVoipConferenceFinished " + e.getMessage());
             }
-
+        }
     }
 }

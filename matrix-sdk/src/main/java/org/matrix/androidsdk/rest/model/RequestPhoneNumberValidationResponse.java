@@ -16,7 +16,7 @@
 package org.matrix.androidsdk.rest.model;
 
 /**
- *  Response to a request an phone number validation request
+ * Response to a request an phone number validation request
  */
 public class RequestPhoneNumberValidationResponse {
 
@@ -26,7 +26,7 @@ public class RequestPhoneNumberValidationResponse {
     // the attempt count
     public Integer sendAttempt;
 
-    // the email sid
+    // the sid
     public String sid;
 
     // the msisdn

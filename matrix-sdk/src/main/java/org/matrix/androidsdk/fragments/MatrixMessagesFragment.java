@@ -23,9 +23,6 @@ import android.os.Looper;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.text.TextUtils;
-
-import org.matrix.androidsdk.util.Log;
-
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -43,10 +40,11 @@ import org.matrix.androidsdk.rest.callback.SimpleApiCallback;
 import org.matrix.androidsdk.rest.model.Event;
 import org.matrix.androidsdk.rest.model.MatrixError;
 import org.matrix.androidsdk.rest.model.RoomMember;
-import org.matrix.androidsdk.rest.model.RoomResponse;
-import org.matrix.androidsdk.rest.model.Sync.RoomSync;
-import org.matrix.androidsdk.rest.model.Sync.RoomSyncState;
-import org.matrix.androidsdk.rest.model.Sync.RoomSyncTimeline;
+import org.matrix.androidsdk.rest.model.sync.RoomResponse;
+import org.matrix.androidsdk.rest.model.sync.RoomSync;
+import org.matrix.androidsdk.rest.model.sync.RoomSyncState;
+import org.matrix.androidsdk.rest.model.sync.RoomSyncTimeline;
+import org.matrix.androidsdk.util.Log;
 
 import java.util.List;
 
@@ -55,7 +53,7 @@ import java.util.List;
  * pagination. For a UI implementation of this, see {@link MatrixMessageListFragment}.
  */
 public class MatrixMessagesFragment extends Fragment {
-    private static final String LOG_TAG = "MatrixMessagesFragment";
+    private static final String LOG_TAG = MatrixMessagesFragment.class.getSimpleName();
 
     /**
      * The room ID to get messages for.
@@ -89,7 +87,7 @@ public class MatrixMessagesFragment extends Fragment {
     public interface MatrixMessagesListener {
         void onEvent(Event event, EventTimeline.Direction direction, RoomState roomState);
 
-        void onSentEvent(Event event);
+        void onEventSent(Event event, String prevEventId);
 
         void onLiveEventsChunkProcessed();
 
@@ -150,9 +148,9 @@ public class MatrixMessagesFragment extends Fragment {
         }
 
         @Override
-        public void onSentEvent(Event event) {
+        public void onEventSent(Event event, String prevEventId) {
             if (null != mMatrixMessagesListener) {
-                mMatrixMessagesListener.onSentEvent(event);
+                mMatrixMessagesListener.onEventSent(event, prevEventId);
             }
         }
     };
@@ -166,12 +164,23 @@ public class MatrixMessagesFragment extends Fragment {
         }
     };
 
+    // the context
     private Context mContext;
+
+    // the session
     private MXSession mSession;
+
+    // the room
     private Room mRoom;
+
+    // true to keep the room history
     public boolean mKeepRoomHistory;
 
+    // the timeline
     private EventTimeline mEventTimeline;
+
+    // the initial sync is in progress
+    private boolean mHasPendingInitialHistory;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -256,7 +265,10 @@ public class MatrixMessagesFragment extends Fragment {
                 // else, the joining could have been half broken (network error)
                 if (null != mRoom.getState().creator) {
                     RoomMember self = mRoom.getMember(mSession.getCredentials().userId);
-                    if (self != null && RoomMember.MEMBERSHIP_JOIN.equals(self.membership)) {
+                    if (self != null &&
+                            (RoomMember.MEMBERSHIP_JOIN.equals(self.membership) ||
+                                    RoomMember.MEMBERSHIP_KICK.equals(self.membership) ||
+                                    RoomMember.MEMBERSHIP_BAN.equals(self.membership))) {
                         joinedRoom = true;
                     }
                 }
@@ -275,7 +287,7 @@ public class MatrixMessagesFragment extends Fragment {
                 } else {
                     // the room is already joined
                     // fill the messages list
-                    requestInitialHistory();
+                    mHasPendingInitialHistory = true;
                 }
             } else {
                 sendInitialMessagesLoaded();
@@ -290,11 +302,21 @@ public class MatrixMessagesFragment extends Fragment {
         super.onDestroy();
 
         if ((null != mRoom) && (null != mEventTimeline)) {
-            if (mEventTimeline.isLiveTimeline()) {
-                mRoom.removeEventListener(mEventListener);
-            }
-
+            mRoom.removeEventListener(mEventListener);
             mEventTimeline.removeEventTimelineListener(mEventTimelineListener);
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // request the initial history until it is done.
+        // https://github.com/vector-im/riot-android/issues/1264
+        // in some weird conditions, the RoomActivity is launched
+        // but RoomActivity.onResume is called followed by RoomActivity.onPause and RoomActivity.onResume
+        // within a 100ms interval
+        if (mHasPendingInitialHistory) {
+            requestInitialHistory();
         }
     }
 
@@ -342,7 +364,7 @@ public class MatrixMessagesFragment extends Fragment {
                     mEventTimeline.handleJoinedRoomSync(roomSync, true);
 
                     Log.d(LOG_TAG, "The room preview is done -> fill the room history");
-                    requestInitialHistory();
+                    mHasPendingInitialHistory = true;
                 } else {
                     Log.d(LOG_TAG, "A preview data is provided with no sync response : assume that it is not possible to get a room preview");
 
@@ -378,9 +400,7 @@ public class MatrixMessagesFragment extends Fragment {
                 Log.e(LOG_TAG, "The room preview of " + mRoom.getRoomId() + "failed " + errorMessage);
 
                 if (null != getActivity()) {
-                    if (null != mMatrixMessagesListener) {
-                        mMatrixMessagesListener.hideInitLoading();
-                    }
+                    getActivity().finish();
                 }
             }
 
@@ -436,7 +456,7 @@ public class MatrixMessagesFragment extends Fragment {
             public void onSuccess(Void info) {
                 Log.d(LOG_TAG, "initializeTimeline is done");
 
-                if (null != getActivity()) {
+                if (null != getActivity() && !getActivity().isFinishing()) {
                     if (null != mMatrixMessagesListener) {
                         mMatrixMessagesListener.hideInitLoading();
                         mMatrixMessagesListener.onTimelineInitialized();
@@ -448,7 +468,7 @@ public class MatrixMessagesFragment extends Fragment {
             private void onError() {
                 Log.d(LOG_TAG, "initializeTimeline fails");
 
-                if (null != getActivity()) {
+                if (null != getActivity() && !getActivity().isFinishing()) {
                     if (null != mMatrixMessagesListener) {
                         mMatrixMessagesListener.hideInitLoading();
                         mMatrixMessagesListener.onTimelineInitialized();
@@ -480,7 +500,6 @@ public class MatrixMessagesFragment extends Fragment {
      * Request messages in this room upon entering.
      */
     protected void requestInitialHistory() {
-
         Log.d(LOG_TAG, "requestInitialHistory " + mRoom.getRoomId());
 
         // the initial sync will be retrieved when a network connection will be found
@@ -488,6 +507,7 @@ public class MatrixMessagesFragment extends Fragment {
             @Override
             public void onSuccess(Integer info) {
                 Log.d(LOG_TAG, "requestInitialHistory onSuccess");
+                mHasPendingInitialHistory = false;
 
                 if (null != getActivity()) {
                     if (null != mMatrixMessagesListener) {
@@ -500,6 +520,8 @@ public class MatrixMessagesFragment extends Fragment {
 
             private void onError(String errorMessage) {
                 Log.e(LOG_TAG, "requestInitialHistory failed" + errorMessage);
+                mHasPendingInitialHistory = false;
+
                 if (null != getActivity()) {
                     Toast.makeText(mContext, errorMessage, Toast.LENGTH_LONG).show();
 
@@ -601,18 +623,6 @@ public class MatrixMessagesFragment extends Fragment {
     }
 
     /**
-     * Send an event in a room
-     *
-     * @param event    the event
-     * @param callback the callback
-     */
-    public void sendEvent(Event event, ApiCallback<Void> callback) {
-        if (null != mRoom) {
-            mRoom.sendEvent(event, callback);
-        }
-    }
-
-    /**
      * Redact an event.
      *
      * @param eventId  the event Id
@@ -638,56 +648,33 @@ public class MatrixMessagesFragment extends Fragment {
             @Override
             public void onSuccess(Void info) {
                 Log.d(LOG_TAG, "joinRoom succeeds");
-
-                if (null != getActivity()) {
-                    if (null != mMatrixMessagesListener) {
-                        getActivity().runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                try {
-                                    mMatrixMessagesListener.hideInitLoading();
-                                    mMatrixMessagesListener.onInitialMessagesLoaded();
-                                } catch (Exception e) {
-                                    Log.e(LOG_TAG, "joinRoom callback fails " + e.getLocalizedMessage());
-                                }
-                            }
-                        });
-                    }
-                }
+                requestInitialHistory();
             }
 
             private void onError(String errorMessage) {
                 Log.e(LOG_TAG, "joinRoom error: " + errorMessage);
                 if (null != getActivity()) {
                     Toast.makeText(mContext, errorMessage, Toast.LENGTH_SHORT).show();
-                    if (null != mMatrixMessagesListener) {
-
-                        getActivity().runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                mMatrixMessagesListener.hideInitLoading();
-                            }
-                        });
-                    }
+                    getActivity().finish();
                 }
             }
 
             // the request will be automatically restarted when a valid network will be found
             @Override
             public void onNetworkError(Exception e) {
-                Log.e(LOG_TAG, "joinRoom Network error: " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "joinRoom Network error: " + e.getMessage());
                 onError(e.getLocalizedMessage());
             }
 
             @Override
             public void onMatrixError(MatrixError e) {
-                Log.e(LOG_TAG, "joinRoom onMatrixError : " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "joinRoom onMatrixError : " + e.getMessage());
                 onError(e.getLocalizedMessage());
             }
 
             @Override
             public void onUnexpectedError(Exception e) {
-                Log.e(LOG_TAG, "joinRoom Override : " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "joinRoom Override : " + e.getMessage());
                 onError(e.getLocalizedMessage());
             }
         });

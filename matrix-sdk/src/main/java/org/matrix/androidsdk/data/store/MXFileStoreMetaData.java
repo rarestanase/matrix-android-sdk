@@ -16,12 +16,14 @@
 
 package org.matrix.androidsdk.data.store;
 
-import org.matrix.androidsdk.rest.model.ThirdPartyIdentifier;
+import org.matrix.androidsdk.rest.model.pid.ThirdPartyIdentifier;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class MXFileStoreMetaData implements java.io.Serializable {
     // The obtained user id.
@@ -34,13 +36,16 @@ public class MXFileStoreMetaData implements java.io.Serializable {
     public int mVersion = -1;
 
     /**
-     User information
+     * User information
      */
     public String mUserDisplayName = null;
     public String mUserAvatarUrl = null;
     public List<ThirdPartyIdentifier> mThirdPartyIdentifiers = null;
     public List<String> mIgnoredUsers = new ArrayList<>();
     public Map<String, List<String>> mDirectChatRoomsMap = null;
+    public boolean mIsUrlPreviewEnabled = false;
+    public Map<String, Object> mUserWidgets = new HashMap<>();
+    public Set<String> mRoomsListWithoutURLPrevew = new HashSet<>();
 
     // crypto
     public boolean mEndToEndDeviceAnnounced = false;
@@ -63,7 +68,10 @@ public class MXFileStoreMetaData implements java.io.Serializable {
         copy.mDirectChatRoomsMap = mDirectChatRoomsMap;
         copy.mEndToEndDeviceAnnounced = mEndToEndDeviceAnnounced;
 
+        copy.mIsUrlPreviewEnabled = mIsUrlPreviewEnabled;
+        copy.mUserWidgets = mUserWidgets;
+        copy.mRoomsListWithoutURLPrevew = mRoomsListWithoutURLPrevew;
+
         return copy;
     }
-
 }

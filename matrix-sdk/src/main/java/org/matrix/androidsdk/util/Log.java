@@ -25,6 +25,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 import java.util.logging.Formatter;
 import java.util.logging.FileHandler;
 import java.util.logging.Level;
@@ -35,27 +36,34 @@ import java.util.logging.Logger;
  * Intended to mimic {@link android.util.Log} in terms of interface, but with a lot of extra behind the scenes stuff.
  */
 public class Log {
+    private static final String LOG_TAG = "Log";
+
     private static final String LINE_SEPARATOR = System.getProperty("line.separator");
-    private static final int LOG_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
-    
+    private static final int LOG_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+
     // relatively large rotation count because closing > opening the app rotates the log (!)
-    private static final int LOG_ROTATION_COUNT = 5;
-    
+    private static final int LOG_ROTATION_COUNT = 15;
+
     private static final Logger sLogger = Logger.getLogger("org.matrix.androidsdk");
     private static FileHandler sFileHandler = null;
     private static File sCacheDirectory = null;
     private static String sFileName = "matrix";
     private static boolean isEnable = true;
-    
+
     public enum EventTag {
-        /** A navigation event, e.g. onPause */ NAVIGATION,
-        /** A user triggered event, e.g. onClick */ USER,
-        /** User-visible notifications */ NOTICE,
-        /** A background event e.g. incoming messages */ BACKGROUND
+        /** A navigation event, e.g. onPause */
+        NAVIGATION,
+        /** A user triggered event, e.g. onClick */
+        USER,
+        /** User-visible notifications */
+        NOTICE,
+        /** A background event e.g. incoming messages */
+        BACKGROUND
     }
-    
+
     /**
      * Initialises the logger. Should be called AFTER {@link Log#setLogDirectory(File)}.
+     * @param fileName the base file name
      */
     public static void init(String fileName) {
         try {
@@ -85,26 +93,41 @@ public class Log {
         }
         sCacheDirectory = cacheDir;
     }
-    
+
+    /**
+     * Set the directory to put log files.
+     * @return the cache directory
+     */
+    public static File getLogDirectory() {
+        return sCacheDirectory;
+    }
+
     /**
      * Adds our own log files to the provided list of files.
      * @param files The list of files to add to.
      * @return The same list with more files added.
      */
     public static List<File> addLogFiles(List<File> files) {
-        sFileHandler.flush();
-        String absPath = sCacheDirectory.getAbsolutePath();
-        
-        for (int i=0; i<=LOG_ROTATION_COUNT; i++) {
-            String filepath = absPath+"/"+sFileName+"."+i+".txt";
-            File file = new File(filepath);
-            if (file.exists()) {
-                files.add(file);
+        try {
+            // reported by GA
+            if (null != sFileHandler) {
+                sFileHandler.flush();
+                String absPath = sCacheDirectory.getAbsolutePath();
+
+                for (int i = 0; i <= LOG_ROTATION_COUNT; i++) {
+                    String filepath = absPath + "/" + sFileName + "." + i + ".txt";
+                    File file = new File(filepath);
+                    if (file.exists()) {
+                        files.add(file);
+                    }
+                }
             }
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "## addLogFiles() failed : " + e.getMessage());
         }
         return files;
     }
-    
+
     public static void logToFile(String level, String tag, String content) {
         if (null == sCacheDirectory) {
             return;
@@ -120,22 +143,30 @@ public class Log {
         b.append(content);
         sLogger.info(b.toString());
     }
-    
+
     /**
      * Log events which can be automatically analysed
      * @param tag the EventTag
      * @param content Content to log
      */
     public static void event(EventTag tag, String content) {
+        if (!isEnable) {
+            return;
+        }
+        android.util.Log.v(tag.name(), content);
         logToFile("EVENT", tag.name(), content);
     }
-    
+
     /**
      * Log connection information, such as urls hit, incoming data, current connection status.
      * @param tag Log tag
      * @param content Content to log
      */
     public static void con(String tag, String content) {
+        if (!isEnable) {
+            return;
+        }
+        android.util.Log.v(tag, content);
         logToFile("CON", tag, content);
     }
 
@@ -146,7 +177,7 @@ public class Log {
         android.util.Log.v(tag, content);
         logToFile("V", tag, content);
     }
-    
+
     public static void v(String tag, String content, Throwable throwable) {
         if (!isEnable) {
             return;
@@ -154,7 +185,7 @@ public class Log {
         android.util.Log.v(tag, content, throwable);
         logToFile("V", tag, content);
     }
-    
+
     public static void d(String tag, String content) {
         if (!isEnable) {
             return;
@@ -162,7 +193,7 @@ public class Log {
         android.util.Log.d(tag, content);
         logToFile("D", tag, content);
     }
-    
+
     public static void d(String tag, String content, Throwable throwable) {
         if (!isEnable) {
             return;
@@ -170,7 +201,7 @@ public class Log {
         android.util.Log.d(tag, content, throwable);
         logToFile("D", tag, content);
     }
-    
+
     public static void i(String tag, String content) {
         if (!isEnable) {
             return;
@@ -178,7 +209,7 @@ public class Log {
         android.util.Log.i(tag, content);
         logToFile("I", tag, content);
     }
-    
+
     public static void i(String tag, String content, Throwable throwable) {
         if (!isEnable) {
             return;
@@ -186,7 +217,7 @@ public class Log {
         android.util.Log.i(tag, content, throwable);
         logToFile("I", tag, content);
     }
-    
+
     public static void w(String tag, String content) {
         if (!isEnable) {
             return;
@@ -194,7 +225,7 @@ public class Log {
         android.util.Log.w(tag, content);
         logToFile("W", tag, content);
     }
-    
+
     public static void w(String tag, String content, Throwable throwable) {
         if (!isEnable) {
             return;
@@ -202,7 +233,7 @@ public class Log {
         android.util.Log.w(tag, content, throwable);
         logToFile("W", tag, content);
     }
-    
+
     public static void e(String tag, String content) {
         if (!isEnable) {
             return;
@@ -210,7 +241,7 @@ public class Log {
         android.util.Log.e(tag, content);
         logToFile("E", tag, content);
     }
-    
+
     public static void e(String tag, String content, Throwable throwable) {
         if (!isEnable) {
             return;
@@ -218,7 +249,7 @@ public class Log {
         android.util.Log.e(tag, content, throwable);
         logToFile("E", tag, content);
     }
-    
+
     public static void wtf(String tag, String content) {
         if (!isEnable) {
             return;
@@ -226,14 +257,15 @@ public class Log {
         logToFile("WTF", tag, content);
         android.util.Log.wtf(tag, content);
     }
-    
+
     public static void wtf(String tag, Throwable throwable) {
         if (!isEnable) {
             return;
         }
         android.util.Log.wtf(tag, throwable);
+        logToFile("WTF", tag, throwable.getMessage());
     }
-    
+
     public static void wtf(String tag, String content, Throwable throwable) {
         if (!isEnable) {
             return;
@@ -241,12 +273,18 @@ public class Log {
         logToFile("WTF", tag, content);
         android.util.Log.wtf(tag, content, throwable);
     }
-    
+
     public static final class LogFormatter extends Formatter {
-        private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("MM-dd HH:mm:ss.SSS ", Locale.US);
-        
+        private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US);
+        private static boolean mIsTimeZoneSet = false;
+
         @Override
         public String format(LogRecord r) {
+            if (!mIsTimeZoneSet) {
+                DATE_FORMAT.setTimeZone(TimeZone.getTimeZone("UTC"));
+                mIsTimeZoneSet = true;
+            }
+
             Throwable thrown = r.getThrown();
             if (thrown != null) {
                 StringWriter sw = new StringWriter();
@@ -260,6 +298,7 @@ public class Log {
                 StringBuilder b = new StringBuilder();
                 String date = DATE_FORMAT.format(new Date(r.getMillis()));
                 b.append(date);
+                b.append("Z ");
                 b.append(r.getMessage());
                 b.append(LINE_SEPARATOR);
                 return b.toString();

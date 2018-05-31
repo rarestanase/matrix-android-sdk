@@ -16,7 +16,6 @@
  */
 package org.matrix.androidsdk.rest.json;
 
-import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -94,7 +93,7 @@ public class ConditionDeserializerTest {
         String conditionJson = "{'kind': 'strange_unknown_kind'}";
         Condition condition = gson.fromJson(conditionJson, Condition.class);
 
-        assertNull(condition);
+        assertNotNull(condition);
     }
 
     @Test

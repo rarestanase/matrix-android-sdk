@@ -7,10 +7,21 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.READ_LOGS" />
+    <uses-permission android:name="android.permission.READ_LOGS" tools:ignore="ProtectedPermissions"/>
     <uses-permission android:name="android.permission.REORDER_TASKS" />
 
-    <!-- libjingle is designed for API >= 15 but the app should work from API >= 11 -->
-    <uses-sdk tools:overrideLibrary="io.pristine.libjingle"/>
+    <!-- bluetooth headset -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
 
+    <!-- libjingle is designed for API >= 15 but the app should work from API >= 11 -->
+    <!--uses-sdk tools:overrideLibrary="io.pristine.libjingle"/-->
+
+
+    <application
+        tools:replace="label"
+        android:label="@string/matrix_sdk_app_name">
+
+        <receiver android:name="org.matrix.androidsdk.sync.EventsThread$SyncDelayReceiver" />
+    </application>
 </manifest>

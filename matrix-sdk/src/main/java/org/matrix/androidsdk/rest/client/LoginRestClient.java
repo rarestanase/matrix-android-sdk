@@ -1,13 +1,13 @@
-/* 
+/*
  * Copyright 2014 OpenMarket Ltd
  * Copyright 2017 Vector Creations Ltd
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,12 +17,11 @@
 package org.matrix.androidsdk.rest.client;
 
 import android.os.Build;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import com.google.gson.JsonObject;
 
-import org.matrix.androidsdk.HomeserverConnectionConfig;
+import org.matrix.androidsdk.HomeServerConnectionConfig;
 import org.matrix.androidsdk.RestClient;
 import org.matrix.androidsdk.rest.api.LoginApi;
 import org.matrix.androidsdk.rest.callback.ApiCallback;
@@ -30,6 +29,7 @@ import org.matrix.androidsdk.rest.callback.RestAdapterCallback;
 import org.matrix.androidsdk.rest.model.login.Credentials;
 import org.matrix.androidsdk.rest.model.login.LoginFlow;
 import org.matrix.androidsdk.rest.model.login.LoginFlowResponse;
+import org.matrix.androidsdk.rest.model.login.LoginParams;
 import org.matrix.androidsdk.rest.model.login.PasswordLoginParams;
 import org.matrix.androidsdk.rest.model.login.RegistrationParams;
 import org.matrix.androidsdk.rest.model.login.TokenLoginParams;
@@ -55,15 +55,17 @@ public class LoginRestClient extends RestClient<LoginApi> {
 
     /**
      * Public constructor.
+     *
      * @param hsConfig the home server connection config
      */
-    public LoginRestClient(HomeserverConnectionConfig hsConfig) {
+    public LoginRestClient(HomeServerConnectionConfig hsConfig) {
         super(hsConfig, LoginApi.class, RestClient.URI_API_PREFIX_PATH_R0, false);
     }
 
     /**
      * Retrieve the login supported flows.
      * It should be done to check before displaying a default login form.
+     *
      * @param callback the callback success and failure callback
      */
     public void getSupportedLoginFlows(final ApiCallback<List<LoginFlow>> callback) {
@@ -75,8 +77,7 @@ public class LoginRestClient extends RestClient<LoginApi> {
                     public void onRetry() {
                         getSupportedLoginFlows(callback);
                     }
-                }
-        ) {
+                }) {
             @Override
             public void success(LoginFlowResponse loginFlowResponse, Response response) {
                 onEventSent();
@@ -87,7 +88,8 @@ public class LoginRestClient extends RestClient<LoginApi> {
 
     /**
      * Request an account creation
-     * @param params the registration parameters
+     *
+     * @param params   the registration parameters
      * @param callback the callbacks
      */
     public void register(final RegistrationParams params, final ApiCallback<Credentials> callback) {
@@ -113,8 +115,8 @@ public class LoginRestClient extends RestClient<LoginApi> {
                     public void onRetry() {
                         register(params, callback);
                     }
-                }
-        ) {
+                }) {
+
             @Override
             public void success(JsonObject jsonObject, Response response) {
                 onEventSent();
@@ -132,15 +134,23 @@ public class LoginRestClient extends RestClient<LoginApi> {
      * @param callback the callback success and failure callback
      */
     public void loginWithUser(final String user, final String password, final ApiCallback<Credentials> callback) {
-        loginWithUser(user, password, callback, null);
+        loginWithUser(user, password, null, callback);
     }
 
-    public void loginWithUser(final String user, final String password, final ApiCallback<Credentials> callback, @Nullable final String deviceId) {
+    /**
+     * Attempt to login with username/password
+     *
+     * @param user       the username
+     * @param password   the password
+     * @param deviceName the device name
+     * @param callback   the callback success and failure callback
+     */
+    public void loginWithUser(final String user, final String password, final String deviceName, final ApiCallback<Credentials> callback) {
         final String description = "loginWithUser : " + user;
 
         PasswordLoginParams params = new PasswordLoginParams();
         params.setUserIdentifier(user, password);
-        params.setDeviceId(deviceId);
+        params.setDeviceName(deviceName);
 
         login(params, callback, description);
     }
@@ -154,15 +164,24 @@ public class LoginRestClient extends RestClient<LoginApi> {
      * @param callback the callback success and failure callback
      */
     public void loginWith3Pid(final String medium, final String address, final String password, final ApiCallback<Credentials> callback) {
-        loginWith3Pid(medium, address, password, callback, null);
+        loginWith3Pid(medium, address, password, null, callback);
     }
 
-    public void loginWith3Pid(final String medium, final String address, final String password, final ApiCallback<Credentials> callback, @Nullable final String deviceId) {
+    /**
+     * Attempt to login with 3pid/password
+     *
+     * @param medium     the medium of the 3pid
+     * @param address    the address of the 3pid
+     * @param password   the password
+     * @param deviceName the device name
+     * @param callback   the callback success and failure callback
+     */
+    public void loginWith3Pid(final String medium, final String address, final String password, final String deviceName, final ApiCallback<Credentials> callback) {
         final String description = "loginWith3pid : " + address;
 
         PasswordLoginParams params = new PasswordLoginParams();
         params.setThirdPartyIdentifier(medium, address, password);
-        params.setDeviceId(deviceId);
+        params.setDeviceName(deviceName);
 
         login(params, callback, description);
     }
@@ -176,27 +195,46 @@ public class LoginRestClient extends RestClient<LoginApi> {
      * @param callback    the callback success and failure callback
      */
     public void loginWithPhoneNumber(final String phoneNumber, final String countryCode, final String password, final ApiCallback<Credentials> callback) {
-        loginWithPhoneNumber(phoneNumber, countryCode, password, callback, null);
+        loginWithPhoneNumber(phoneNumber, countryCode, password, null, callback);
     }
 
-    public void loginWithPhoneNumber(final String phoneNumber, final String countryCode, final String password, final ApiCallback<Credentials> callback, @Nullable final String deviceId) {
+    /**
+     * Attempt to login with phone number/password
+     *
+     * @param phoneNumber the phone number
+     * @param countryCode the ISO country code
+     * @param password    the password
+     * @param deviceName  the device name
+     * @param callback    the callback success and failure callback
+     */
+    public void loginWithPhoneNumber(final String phoneNumber, final String countryCode, final String password, final String deviceName, final ApiCallback<Credentials> callback) {
         final String description = "loginWithPhoneNumber : " + phoneNumber;
 
         PasswordLoginParams params = new PasswordLoginParams();
         params.setPhoneIdentifier(phoneNumber, countryCode, password);
-        params.setDeviceId(deviceId);
+        params.setDeviceName(deviceName);
 
         login(params, callback, description);
     }
 
     /**
+     * Make a login request.
+     *
+     * @param params   custom login params
+     * @param callback the asynchronous callback
+     */
+    public void login(LoginParams params, final ApiCallback<Credentials> callback) {
+        login(params, callback, "login with a " + params.getClass().getSimpleName() + " object");
+    }
+
+    /**
      * Make login request
      *
-     * @param params login params
-     * @param callback
-     * @param description
+     * @param params      login params
+     * @param callback    the asynchronous callback
+     * @param description the request description
      */
-    private void login(final PasswordLoginParams params, final ApiCallback<Credentials> callback, final String description) {
+    private void login(final LoginParams params, final ApiCallback<Credentials> callback, final String description) {
         mApi.login(params).enqueue(new RestAdapterCallback<JsonObject>(description, mUnsentEventsManager, callback,
 
                 new RestAdapterCallback.RequestRetryCallBack() {
@@ -208,7 +246,7 @@ public class LoginRestClient extends RestClient<LoginApi> {
 
         ) {
             @Override
-            public void success(JsonObject jsonObject, Response response) {
+            public void success(JsonObject jsonObject, Response<JsonObject> response) {
                 onEventSent();
                 mCredentials = gson.fromJson(jsonObject, Credentials.class);
                 callback.onSuccess(mCredentials);
@@ -218,22 +256,26 @@ public class LoginRestClient extends RestClient<LoginApi> {
 
     /**
      * Attempt a user/token log in.
-     * @param user the user name
-     * @param token the token
-     * @param callback the callback success and failure callback
+     *
+     * @param user       the user name
+     * @param token      the token
+     * @param deviceName the device name
+     * @param callback   the callback success and failure callback
      */
-    public void loginWithToken(final String user, final String token, final ApiCallback<Credentials> callback) {
-         loginWithToken(user, token, UUID.randomUUID().toString(), callback);
+    public void loginWithToken(final String user, final String token, final String deviceName, final ApiCallback<Credentials> callback) {
+        loginWithToken(user, token, UUID.randomUUID().toString(), deviceName, callback);
     }
 
     /**
      * Attempt a user/token log in.
-     * @param user the user name
-     * @param token the token
-     * @param txn_id the client transactio id to include in the request
-     * @param callback the callback success and failure callback
+     *
+     * @param user       the user name
+     * @param token      the token
+     * @param txn_id     the client transaction id to include in the request
+     * @param deviceName the device name
+     * @param callback   the callback success and failure callback
      */
-    public void loginWithToken(final String user, final String token, final String txn_id, final ApiCallback<Credentials> callback) {
+    public void loginWithToken(final String user, final String token, final String txn_id, String deviceName, final ApiCallback<Credentials> callback) {
         // privacy
         //final String description = "loginWithPassword user : " + user;
         final String description = "loginWithPassword user";
@@ -242,17 +284,20 @@ public class LoginRestClient extends RestClient<LoginApi> {
         params.user = user;
         params.token = token;
         params.txn_id = txn_id;
-        params.initial_device_display_name = Build.MODEL.trim();
+
+        if ((null != deviceName) && !TextUtils.isEmpty(deviceName.trim())) {
+            params.initial_device_display_name = deviceName.trim();
+        } else {
+            params.initial_device_display_name = Build.MODEL.trim();
+        }
 
         mApi.login(params).enqueue(new RestAdapterCallback<JsonObject>(description, mUnsentEventsManager, callback,
-
                 new RestAdapterCallback.RequestRetryCallBack() {
                     @Override
                     public void onRetry() {
                         loginWithToken(user, token, txn_id, callback);
                     }
                 }
-
         ) {
             @Override
             public void success(JsonObject jsonObject, Response response) {
@@ -265,6 +310,7 @@ public class LoginRestClient extends RestClient<LoginApi> {
 
     /**
      * Invalidate the access token, so that it can no longer be used for authorization.
+     *
      * @param callback the callback success and failure callback
      */
     public void logout(final ApiCallback<JsonObject> callback) {
@@ -280,5 +326,4 @@ public class LoginRestClient extends RestClient<LoginApi> {
                 }
         ));
     }
-
 }

@@ -44,7 +44,7 @@ public final class OkHttpClientProvider {
     public static synchronized OkHttpClient getRestOkHttpClient(
         Credentials credentials,
         UnsentEventsManager unsentEventsManager,
-        HomeserverConnectionConfig hsConfig,
+        HomeServerConnectionConfig hsConfig,
         boolean useMXExececutor
     ) {
         int parametersHash = computeParametersHash(
@@ -66,7 +66,7 @@ public final class OkHttpClientProvider {
     }
 
     public static synchronized OkHttpClient getDownloadOkHttpClient(
-        HomeserverConnectionConfig hsConfig
+        HomeServerConnectionConfig hsConfig
     ) {
         int parameterHash = computeParametersHash(hsConfig);
         if (parameterHash != downloadParametersHash) {
@@ -94,7 +94,7 @@ public final class OkHttpClientProvider {
     private static void initRestOkHttpClient(
         Credentials credentials,
         UnsentEventsManager unsentEventsManager,
-        HomeserverConnectionConfig hsConfig,
+        HomeServerConnectionConfig hsConfig,
         boolean useMXExececutor
     ) {
         OkHttpClient.Builder okHttpClientBuilder = new OkHttpClient()
@@ -116,7 +116,7 @@ public final class OkHttpClientProvider {
         restOkHttpClient = okHttpClientBuilder.build();
     }
 
-    private static void initDownloadOkHttpClient(HomeserverConnectionConfig hsConfig) {
+    private static void initDownloadOkHttpClient(HomeServerConnectionConfig hsConfig) {
         OkHttpClient.Builder okHttpClientBuilder = new OkHttpClient()
             .newBuilder()
             .readTimeout(DOWNLOAD_READ_TIME_OUT_MS, TimeUnit.MILLISECONDS);
@@ -131,15 +131,15 @@ public final class OkHttpClientProvider {
         uploadOkHttpClient = okHttpClientBuilder.build();
     }
 
-    private static void configureCertificatPinning(
-        HomeserverConnectionConfig hsConfig,
+    public static void configureCertificatPinning(
+        HomeServerConnectionConfig hsConfig,
         OkHttpClient.Builder okHttpClientBuilder
     ) {
-        List<HomeserverConnectionConfig.CertificatePin> certificatePins =
+        List<HomeServerConnectionConfig.CertificatePin> certificatePins =
             hsConfig.getCertificatePins();
         if (!certificatePins.isEmpty()) {
             CertificatePinner.Builder builder = new CertificatePinner.Builder();
-            for (HomeserverConnectionConfig.CertificatePin certificatePin : certificatePins) {
+            for (HomeServerConnectionConfig.CertificatePin certificatePin : certificatePins) {
                 builder.add(certificatePin.getHostname(), certificatePin.getPublicKeyHash());
             }
             okHttpClientBuilder.certificatePinner(builder.build());
@@ -156,6 +156,11 @@ public final class OkHttpClientProvider {
                 if (null != userAgent) {
                     // set a custom user agent
                     newRequestBuilder.addHeader("User-Agent", userAgent);
+                }
+
+                // Add the access token to all requests if it is set
+                if ((credentials != null) && (credentials.accessToken != null)) {
+                    newRequestBuilder.addHeader("Authorization", "Bearer " + credentials.accessToken);
                 }
 
                 // Add the access token to all requests if it is set
@@ -192,7 +197,7 @@ public final class OkHttpClientProvider {
         };
     }
 
-    private static Interceptor makeFirstSyncHackInterceptor() {
+    public static Interceptor makeFirstSyncHackInterceptor() {
         final String syncPath = "/" + URI_API_PREFIX_PATH_R0 + "sync";
         return new Interceptor() {
             @Override public Response intercept(Chain chain) throws IOException {

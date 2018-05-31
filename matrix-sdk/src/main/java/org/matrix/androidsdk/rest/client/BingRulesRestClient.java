@@ -15,7 +15,7 @@
  */
 package org.matrix.androidsdk.rest.client;
 
-import org.matrix.androidsdk.HomeserverConnectionConfig;
+import org.matrix.androidsdk.HomeServerConnectionConfig;
 import org.matrix.androidsdk.RestClient;
 import org.matrix.androidsdk.rest.api.BingRulesApi;
 import org.matrix.androidsdk.rest.callback.ApiCallback;
@@ -23,34 +23,70 @@ import org.matrix.androidsdk.rest.callback.DefaultRetrofit2CallbackWrapper;
 import org.matrix.androidsdk.rest.model.bingrules.BingRule;
 import org.matrix.androidsdk.rest.model.bingrules.BingRulesResponse;
 
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
 public class BingRulesRestClient extends RestClient<BingRulesApi> {
 
     /**
      * {@inheritDoc}
      */
-    public BingRulesRestClient(HomeserverConnectionConfig hsConfig) {
+    public BingRulesRestClient(HomeServerConnectionConfig hsConfig) {
         super(hsConfig, BingRulesApi.class, RestClient.URI_API_PREFIX_PATH_R0, false);
     }
 
+    /**
+     * Retrieve the bing rules list.
+     *
+     * @param callback the asynchronous callback.
+     */
     public void getAllBingRules(final ApiCallback<BingRulesResponse> callback) {
-        mApi
-            .getAllBingRules()
-            .enqueue(new DefaultRetrofit2CallbackWrapper<>(callback));
+        mApi.getAllBingRules().enqueue(new DefaultRetrofit2CallbackWrapper<>(callback));
     }
 
-    public void updateEnableRuleStatus(
-        String Kind, String ruleId, boolean status, final ApiCallback<Void> callback
-    ) {
-        mApi
-            .updateEnableRuleStatus(Kind, ruleId, status)
-            .enqueue(new DefaultRetrofit2CallbackWrapper<>(callback));
+    /**
+     * Update the rule enable status.
+     *
+     * @param Kind     the rule kind
+     * @param ruleId   the rule id
+     * @param status   the rule state
+     * @param callback the asynchronous callback.
+     */
+    public void updateEnableRuleStatus(String Kind, String ruleId, boolean status, final ApiCallback<Void> callback) {
+        mApi.updateEnableRuleStatus(Kind, ruleId, status).enqueue(new DefaultRetrofit2CallbackWrapper<>(callback));
     }
 
+    /**
+     * Update the rule actions lists.
+     *
+     * @param Kind     the rule kind
+     * @param ruleId   the rule id
+     * @param actions  the rule actions list
+     * @param callback the asynchronous callback
+     */
+    public void updateRuleActions(String Kind, String ruleId, Object actions, final ApiCallback<Void> callback) {
+        mApi.updateRuleActions(Kind, ruleId, actions).enqueue(new DefaultRetrofit2CallbackWrapper<>(callback));
+    }
+
+    /**
+     * Delete a rule.
+     *
+     * @param Kind     the rule kind
+     * @param ruleId   the rule id
+     * @param callback the asynchronous callback
+     */
     public void deleteRule(String Kind, String ruleId, final ApiCallback<Void> callback) {
         mApi.deleteRule(Kind, ruleId).enqueue(new DefaultRetrofit2CallbackWrapper<>(callback));
     }
 
+    /**
+     * Add a rule.
+     *
+     * @param rule     the rule
+     * @param callback the asynchronous callback
+     */
     public void addRule(BingRule rule, final ApiCallback<Void> callback) {
-        mApi.addRule(rule.kind, rule.ruleId, rule).enqueue(new DefaultRetrofit2CallbackWrapper<>(callback));
+        mApi.addRule(rule.kind, rule.ruleId, rule.toJsonElement()).enqueue(new DefaultRetrofit2CallbackWrapper<>(callback));
     }
 }

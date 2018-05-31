@@ -31,8 +31,6 @@ import org.matrix.androidsdk.util.ContentManager;
 import org.matrix.androidsdk.util.JsonUtils;
 import org.matrix.androidsdk.util.Log;
 
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -40,7 +38,6 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -57,13 +54,13 @@ import okio.BufferedSink;
  */
 public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListener.UploadStats, String> {
 
-    private static final String LOG_TAG = "MXMediaUploadWorkerTask";
+    private static final String LOG_TAG = MXMediaUploadWorkerTask.class.getSimpleName();
 
     // upload ID -> task
     private static final HashMap<String, MXMediaUploadWorkerTask> mPendingUploadByUploadId = new HashMap<>();
 
     // progress listener
-    private ArrayList<IMXMediaUploadListener> mUploadListeners = new ArrayList<>();
+    private final ArrayList<IMXMediaUploadListener> mUploadListeners = new ArrayList<>();
 
     // the upload stats
     private IMXMediaUploadListener.UploadStats mUploadStats;
@@ -92,7 +89,7 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
     private static final int UPLOAD_BUFFER_READ_SIZE = 1024 * 32;
 
     // dummy ApiCallback uses to be warned when the upload must be declared as "undeliverable".
-    private ApiCallback mApiCallback = new ApiCallback() {
+    private final ApiCallback mApiCallback = new ApiCallback() {
         @Override
         public void onSuccess(Object info) {
         }
@@ -122,13 +119,14 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
 
     /**
      * Check if there is a pending download for the url.
+     *
      * @param uploadId The id to check the existence
      * @return the dedicated BitmapWorkerTask if it exists.
      */
     public static MXMediaUploadWorkerTask getMediaDUploadWorkerTask(String uploadId) {
-        if ((uploadId != null) &&  mPendingUploadByUploadId.containsKey(uploadId)) {
+        if ((uploadId != null) && mPendingUploadByUploadId.containsKey(uploadId)) {
             MXMediaUploadWorkerTask task;
-            synchronized(mPendingUploadByUploadId) {
+            synchronized (mPendingUploadByUploadId) {
                 task = mPendingUploadByUploadId.get(uploadId);
             }
             return task;
@@ -144,12 +142,12 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
         Collection<MXMediaUploadWorkerTask> tasks = mPendingUploadByUploadId.values();
 
         // cancels the running task
-        for(MXMediaUploadWorkerTask task : tasks) {
+        for (MXMediaUploadWorkerTask task : tasks) {
             try {
                 task.cancelUpload();
                 task.cancel(true);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "cancelPendingUploads " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "cancelPendingUploads " + e.getMessage());
             }
         }
 
@@ -158,18 +156,19 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
 
     /**
      * Constructor
+     *
      * @param contentManager the content manager
-     * @param contentStream the stream to upload
-     * @param mimeType the mime type
-     * @param uploadId the upload id
-     * @param filename the dest filename
-     * @param listener the upload listener
+     * @param contentStream  the stream to upload
+     * @param mimeType       the mime type
+     * @param uploadId       the upload id
+     * @param filename       the dest filename
+     * @param listener       the upload listener
      */
     public MXMediaUploadWorkerTask(ContentManager contentManager, InputStream contentStream, String mimeType, String uploadId, String filename, IMXMediaUploadListener listener) {
         try {
             contentStream.reset();
         } catch (Exception e) {
-            Log.e(LOG_TAG, "MXMediaUploadWorkerTask " + e.getLocalizedMessage());
+            Log.e(LOG_TAG, "MXMediaUploadWorkerTask " + e.getMessage());
         }
 
         if ((null != listener) && (mUploadListeners.indexOf(listener) < 0)) {
@@ -188,6 +187,7 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
 
     /**
      * Add an upload listener
+     *
      * @param aListener the listener to add.
      */
     public void addListener(IMXMediaUploadListener aListener) {
@@ -231,7 +231,7 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
      * refresh the progress info
      */
     private void publishProgress(long startUploadTime) {
-        mUploadStats.mElapsedTime = (int)((System.currentTimeMillis() - startUploadTime) / 1000);
+        mUploadStats.mElapsedTime = (int) ((System.currentTimeMillis() - startUploadTime) / 1000);
 
         if (0 != mUploadStats.mFileSize) {
             // Uploading data is 90% of the job
@@ -241,7 +241,7 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
 
         // avoid zero div
         if (System.currentTimeMillis() != startUploadTime) {
-            mUploadStats.mBitRate = (int)(((long)mUploadStats.mUploadedSize)  * 1000 / (System.currentTimeMillis() - startUploadTime) / 1024);
+            mUploadStats.mBitRate = (int) (((long) mUploadStats.mUploadedSize) * 1000 / (System.currentTimeMillis() - startUploadTime) / 1024);
         } else {
             mUploadStats.mBitRate = 0;
         }
@@ -264,10 +264,10 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
 
         if (null != mFilename) {
             try {
-                String utf8Filename =  URLEncoder.encode(mFilename, "utf-8");
+                String utf8Filename = URLEncoder.encode(mFilename, "utf-8");
                 urlString += "&filename=" + utf8Filename;
             } catch (Exception e) {
-                Log.e(LOG_TAG, "doInBackground " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "doInBackground " + e.getMessage());
             }
         }
 
@@ -302,20 +302,24 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
             uiHandler.post(new Runnable() {
                 @Override
                 public void run() {
-                    refreshTimer.scheduleAtFixedRate(new TimerTask() {
-                        @Override
-                        public void run() {
-                            uiHandler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                    if (!mIsDone) {
-                                        publishProgress(startUploadTime);
+                    try {
+                        refreshTimer.scheduleAtFixedRate(new TimerTask() {
+                            @Override
+                            public void run() {
+                                uiHandler.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (!mIsDone) {
+                                            publishProgress(startUploadTime);
+                                        }
                                     }
-                                }
-                            });
-                        }
-                    }, new Date(), 100);
 
+                                });
+                            }
+                        }, new java.util.Date(), 100);
+                    } catch (Throwable throwable) {
+                        Log.e(LOG_TAG, "scheduleAtFixedRate failed " + throwable.getMessage());
+                    }
                 }
             });
             initUploadStats(totalSize);
@@ -353,7 +357,7 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
                         JSONObject responseJSON = new JSONObject(serverResponse);
                         serverResponse = responseJSON.getString("error");
                     } catch (JSONException e) {
-                        Log.e(LOG_TAG, "doInBackground : Error parsing " + e.getLocalizedMessage());
+                        Log.e(LOG_TAG, "doInBackground : Error parsing " + e.getMessage());
                     }
                 }
             }
@@ -379,7 +383,7 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
     }
 
     @Override
-    protected void onProgressUpdate(IMXMediaUploadListener.UploadStats ... progress) {
+    protected void onProgressUpdate(IMXMediaUploadListener.UploadStats... progress) {
         super.onProgressUpdate(progress);
 
         Log.d(LOG_TAG, "Upload " + this + " : " + mUploadStats.mProgress);
@@ -389,6 +393,7 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
 
     /**
      * Dispatch the result to the callbacks
+     *
      * @param serverResponse the server response
      */
     private void dispatchResult(final String serverResponse) {
@@ -402,7 +407,7 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
         try {
             mContentStream.close();
         } catch (Exception e) {
-            Log.e(LOG_TAG, "dispatchResult " + e.getLocalizedMessage());
+            Log.e(LOG_TAG, "dispatchResult " + e.getMessage());
         }
 
         if (isUploadCancelled()) {
@@ -434,26 +439,27 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
      * Dispatch Upload start
      */
     private void dispatchOnUploadStart() {
-        for(IMXMediaUploadListener listener : mUploadListeners) {
+        for (IMXMediaUploadListener listener : mUploadListeners) {
             try {
                 listener.onUploadStart(mUploadId);
 
             } catch (Exception e) {
-                Log.e(LOG_TAG, "dispatchOnUploadStart failed " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "dispatchOnUploadStart failed " + e.getMessage());
             }
         }
     }
 
     /**
      * Dispatch Upload start
+     *
      * @param stats the upload stats
      */
     private void dispatchOnUploadProgress(IMXMediaUploadListener.UploadStats stats) {
-        for(IMXMediaUploadListener listener : mUploadListeners) {
+        for (IMXMediaUploadListener listener : mUploadListeners) {
             try {
                 listener.onUploadProgress(mUploadId, stats);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "dispatchOnUploadProgress failed " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "dispatchOnUploadProgress failed " + e.getMessage());
             }
         }
     }
@@ -462,40 +468,42 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, IMXMediaUploadListe
      * Dispatch Upload cancel.
      */
     private void dispatchOnUploadCancel() {
-        for(IMXMediaUploadListener listener : mUploadListeners) {
+        for (IMXMediaUploadListener listener : mUploadListeners) {
             try {
                 listener.onUploadCancel(mUploadId);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "listener failed " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "listener failed " + e.getMessage());
             }
         }
     }
 
     /**
      * Dispatch Upload error.
+     *
      * @param serverResponseCode the server response code.
      * @param serverErrorMessage the server error message
      */
     private void dispatchOnUploadError(int serverResponseCode, String serverErrorMessage) {
-        for(IMXMediaUploadListener listener : mUploadListeners) {
+        for (IMXMediaUploadListener listener : mUploadListeners) {
             try {
                 listener.onUploadError(mUploadId, serverResponseCode, serverErrorMessage);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "dispatchOnUploadError failed " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "dispatchOnUploadError failed " + e.getMessage());
             }
         }
     }
 
     /**
      * Dispatch Upload complete.
+     *
      * @param contentUri the media uri.
      */
     private void dispatchOnUploadComplete(String contentUri) {
-        for(IMXMediaUploadListener listener : mUploadListeners) {
+        for (IMXMediaUploadListener listener : mUploadListeners) {
             try {
                 listener.onUploadComplete(mUploadId, contentUri);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "dispatchOnUploadComplete failed " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "dispatchOnUploadComplete failed " + e.getMessage());
             }
         }
     }

@@ -37,15 +37,17 @@ public interface LoginApi {
     @GET("login")
     Call<LoginFlowResponse> login();
 
-
     /**
      * Try to create an account
+     *
+     * @param params the registration params
      */
     @POST("register")
     Call<JsonObject> register(@Body RegistrationParams params);
 
     /**
      * Pass params to the server for the current login phase.
+     *
      * @param loginParams the login parameters
      */
     @POST("login")

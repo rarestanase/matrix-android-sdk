@@ -21,12 +21,12 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import org.matrix.androidsdk.rest.model.Event;
-import org.matrix.androidsdk.util.JsonUtils;
 
 import java.util.HashMap;
 import java.util.regex.Pattern;
 
 public class EventMatchCondition extends Condition {
+
     public String key;
     public String pattern;
 
@@ -36,22 +36,28 @@ public class EventMatchCondition extends Condition {
         kind = Condition.KIND_EVENT_MATCH;
     }
 
+    @Override
+    public String toString() {
+        return "EventMatchCondition{" + "key='" + key + ", pattern=" + pattern + '}';
+    }
+
     /**
      * Returns whether the given event satisfies the condition.
+     *
      * @param event the event
      * @return true if the event satisfies the condition
      */
     public boolean isSatisfied(Event event) {
         String fieldVal = null;
 
-        // some informations are in the decrypted event (like type)
+        // some information are in the decrypted event (like type)
         if (event.isEncrypted() && (null != event.getClearEvent())) {
-            JsonObject eventJson = JsonUtils.toJson(event.getClearEvent());
+            JsonObject eventJson = event.getClearEvent().toJsonObject();
             fieldVal = extractField(eventJson, key);
         }
 
         if (TextUtils.isEmpty(fieldVal)) {
-            JsonObject eventJson = JsonUtils.toJson(event);
+            JsonObject eventJson = event.toJsonObject();
             fieldVal = extractField(eventJson, key);
         }
 

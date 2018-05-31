@@ -24,7 +24,6 @@ import org.matrix.androidsdk.util.MXOsHandler;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
-import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -44,6 +43,7 @@ public class MXRestExecutorService extends AbstractExecutorService {
     public void execute(final Runnable r) {
         mHandler.post(r);
     }
+
     /**
      * Stop any running thread
      */

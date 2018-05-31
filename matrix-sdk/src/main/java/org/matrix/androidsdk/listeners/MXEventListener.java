@@ -56,19 +56,15 @@ public class MXEventListener implements IMXEventListener {
     }
 
     @Override
-    public void onSentEvent(Event event) {
+    public void onEventSent(final Event event, final String prevEventId) {
     }
 
     @Override
-    public void onEventEncrypted(Event event) {
+    public void onEventSentStateUpdated(Event event) {
     }
 
     @Override
     public void onEventDecrypted(Event event) {
-    }
-
-    @Override
-    public void onFailedSendingEvent(Event event) {
     }
 
     @Override
@@ -100,7 +96,15 @@ public class MXEventListener implements IMXEventListener {
     }
 
     @Override
+    public void onNotificationCountUpdate(String roomId) {
+    }
+
+    @Override
     public void onLeaveRoom(String roomId) {
+    }
+
+    @Override
+    public void onRoomKick(String roomId) {
     }
 
     @Override
@@ -112,18 +116,50 @@ public class MXEventListener implements IMXEventListener {
     }
 
     @Override
+    public void onReadMarkerEvent(String roomId) {
+    }
+
+    @Override
     public void onRoomFlush(String roomId) {
     }
 
     @Override
     public void onIgnoredUsersListUpdate() {
     }
-    
+
     @Override
     public void onToDeviceEvent(Event event) {
     }
 
     @Override
     public void onDirectMessageChatRoomsListUpdate() {
+    }
+
+    @Override
+    public void onNewGroupInvitation(String groupId) {
+    }
+
+    @Override
+    public void onJoinGroup(String groupId) {
+    }
+
+    @Override
+    public void onLeaveGroup(String groupId) {
+    }
+    
+    @Override
+    public void onGroupProfileUpdate(String groupId) {
+    }
+
+    @Override
+    public void onGroupRoomsListUpdate(String groupId) {
+    }
+
+    @Override
+    public void onGroupUsersListUpdate(String groupId) {
+    }
+
+    @Override
+    public void onGroupInvitedUsersListUpdate(String groupId) {
     }
 }

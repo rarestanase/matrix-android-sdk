@@ -21,6 +21,8 @@ import android.content.Context;
 import android.os.Looper;
 import android.text.TextUtils;
 
+import org.matrix.androidsdk.crypto.IncomingRoomKeyRequest;
+import org.matrix.androidsdk.crypto.OutgoingRoomKeyRequest;
 import org.matrix.androidsdk.crypto.data.MXOlmInboundGroupSession;
 import org.matrix.androidsdk.util.Log;
 
@@ -50,7 +52,7 @@ import java.util.zip.GZIPOutputStream;
  * the crypto data store
  */
 public class MXFileCryptoStore implements IMXCryptoStore {
-    private static final String LOG_TAG = "MXFileCryptoStore";
+    private static final String LOG_TAG = MXFileCryptoStore.class.getSimpleName();
 
     private static final int MXFILE_CRYPTO_VERSION = 1;
 
@@ -66,8 +68,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
     private static final String MXFILE_CRYPTO_STORE_DEVICES_FILE = "devices";
     private static final String MXFILE_CRYPTO_STORE_DEVICES_FILE_TMP = "devices.tmp";
 
+    private static final String MXFILE_CRYPTO_STORE_TRACKING_STATUSES_FILE = "trackingStatuses";
+    private static final String MXFILE_CRYPTO_STORE_TRACKING_STATUSES_FILE_TMP = "trackingStatuses.tmp";
+
     private static final String MXFILE_CRYPTO_STORE_ALGORITHMS_FILE = "roomsAlgorithms";
-    private static final String MXFILE_CRYPTO_STORE_ALGORITHMS_FILE_TMP = "roomsAlgorithms";
+    private static final String MXFILE_CRYPTO_STORE_ALGORITHMS_FILE_TMP = "roomsAlgorithms.tmp";
 
     private static final String MXFILE_CRYPTO_STORE_OLM_SESSIONS_FILE = "sessions";
     private static final String MXFILE_CRYPTO_STORE_OLM_SESSIONS_FILE_TMP = "sessions.tmp";
@@ -76,6 +81,12 @@ public class MXFileCryptoStore implements IMXCryptoStore {
     private static final String MXFILE_CRYPTO_STORE_INBOUND_GROUP_SESSSIONS_FILE = "inboundGroupSessions";
     private static final String MXFILE_CRYPTO_STORE_INBOUND_GROUP_SESSSIONS_FILE_TMP = "inboundGroupSessions.tmp";
     private static final String MXFILE_CRYPTO_STORE_INBOUND_GROUP_SESSSIONS_FOLDER = "inboundGroupSessionsFolder";
+
+    private static final String MXFILE_CRYPTO_STORE_OUTGOING_ROOM_KEY_REQUEST_FILE = "outgoingRoomKeyRequests";
+    private static final String MXFILE_CRYPTO_STORE_OUTGOING_ROOM_KEY_REQUEST_FILE_TMP = "outgoingRoomKeyRequests.tmp";
+
+    private static final String MXFILE_CRYPTO_STORE_INCOMING_ROOM_KEY_REQUESTS_FILE = "incomingRoomKeyRequests";
+    private static final String MXFILE_CRYPTO_STORE_INCOMING_ROOM_KEY_REQUESTS_FILE_TMP = "incomingRoomKeyRequests.tmp";
 
     // The credentials used for this store
     private Credentials mCredentials;
@@ -93,6 +104,9 @@ public class MXFileCryptoStore implements IMXCryptoStore {
     // The algorithms used in rooms
     private HashMap<String, String> mRoomsAlgorithms;
 
+    // the tracking statuses
+    private HashMap<String, Integer> mTrackingStatuses;
+
     // The olm sessions (<device identity key> -> (<olm session id> -> <olm session>)
     private HashMap<String /*deviceKey*/,
             HashMap<String /*olmSessionId*/, OlmSession>> mOlmSessions;
@@ -103,6 +117,10 @@ public class MXFileCryptoStore implements IMXCryptoStore {
             HashMap<String /*inboundGroupSessionId*/, MXOlmInboundGroupSession2>> mInboundGroupSessions;
     private final Object mInboundGroupSessionsLock = new Object();
 
+    private final Map<Map<String, String>, OutgoingRoomKeyRequest> mOutgoingRoomKeyRequests = new HashMap<>();
+
+    // userId -> deviceId -> [keyRequest]
+    private Map<String, Map<String, List<IncomingRoomKeyRequest>>> mPendingIncomingRoomKeyRequests;
 
     // The path of the MXFileCryptoStore folder
     private File mStoreFile;
@@ -120,6 +138,9 @@ public class MXFileCryptoStore implements IMXCryptoStore {
     private File mAlgorithmsFile;
     private File mAlgorithmsFileTmp;
 
+    private File mTrackingStatusesFile;
+    private File mTrackingStatusesFileTmp;
+
     private File mOlmSessionsFile;
     private File mOlmSessionsFileTmp;
     private File mOlmSessionsFolder;
@@ -128,8 +149,17 @@ public class MXFileCryptoStore implements IMXCryptoStore {
     private File mInboundGroupSessionsFileTmp;
     private File mInboundGroupSessionsFolder;
 
+    private File mOutgoingRoomKeyRequestsFile;
+    private File mOutgoingRoomKeyRequestsFileTmp;
+
+    private File mIncomingRoomKeyRequestsFile;
+    private File mIncomingRoomKeyRequestsFileTmp;
+
     // tell if the store is corrupted
     private boolean mIsCorrupted = false;
+
+    // tell if the store is ready
+    private boolean mIsReady = false;
 
     public MXFileCryptoStore() {
     }
@@ -153,6 +183,9 @@ public class MXFileCryptoStore implements IMXCryptoStore {
         mAlgorithmsFile = new File(mStoreFile, MXFILE_CRYPTO_STORE_ALGORITHMS_FILE);
         mAlgorithmsFileTmp = new File(mStoreFile, MXFILE_CRYPTO_STORE_ALGORITHMS_FILE_TMP);
 
+        mTrackingStatusesFile = new File(mStoreFile, MXFILE_CRYPTO_STORE_TRACKING_STATUSES_FILE);
+        mTrackingStatusesFileTmp = new File(mStoreFile, MXFILE_CRYPTO_STORE_TRACKING_STATUSES_FILE_TMP);
+
         // backward compatibility : the sessions used to be stored in an unique file
         mOlmSessionsFile = new File(mStoreFile, MXFILE_CRYPTO_STORE_OLM_SESSIONS_FILE);
         mOlmSessionsFileTmp = new File(mStoreFile, MXFILE_CRYPTO_STORE_OLM_SESSIONS_FILE_TMP);
@@ -162,6 +195,12 @@ public class MXFileCryptoStore implements IMXCryptoStore {
         mInboundGroupSessionsFile = new File(mStoreFile, MXFILE_CRYPTO_STORE_INBOUND_GROUP_SESSSIONS_FILE);
         mInboundGroupSessionsFileTmp = new File(mStoreFile, MXFILE_CRYPTO_STORE_INBOUND_GROUP_SESSSIONS_FILE_TMP);
         mInboundGroupSessionsFolder = new File(mStoreFile, MXFILE_CRYPTO_STORE_INBOUND_GROUP_SESSSIONS_FOLDER);
+
+        mOutgoingRoomKeyRequestsFile = new File(mStoreFile, MXFILE_CRYPTO_STORE_OUTGOING_ROOM_KEY_REQUEST_FILE);
+        mOutgoingRoomKeyRequestsFileTmp = new File(mStoreFile, MXFILE_CRYPTO_STORE_OUTGOING_ROOM_KEY_REQUEST_FILE_TMP);
+
+        mIncomingRoomKeyRequestsFile = new File(mStoreFile, MXFILE_CRYPTO_STORE_INCOMING_ROOM_KEY_REQUESTS_FILE);
+        mIncomingRoomKeyRequestsFileTmp = new File(mStoreFile, MXFILE_CRYPTO_STORE_INCOMING_ROOM_KEY_REQUESTS_FILE_TMP);
 
         // Build default metadata
         if ((null == mMetaData)
@@ -173,6 +212,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
         mUsersDevicesInfoMap = new MXUsersDevicesMap<>();
         mRoomsAlgorithms = new HashMap<>();
+        mTrackingStatuses = new HashMap<>();
         mOlmSessions = new HashMap<>();
         mInboundGroupSessions = new HashMap<>();
     }
@@ -212,52 +252,70 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public void open() {
-        mMetaData = null;
+        if (mIsReady) {
+            Log.e(LOG_TAG, "## open() : the store is already opened");
+        } else {
+            mMetaData = null;
 
-        loadMetaData();
+            loadMetaData();
 
-        // Check if
-        if (null == mMetaData) {
-            resetData();
-        }
-        // Check store version
-        else if (MXFILE_CRYPTO_VERSION != mMetaData.mVersion) {
-            Log.e(LOG_TAG, "## open() : New MXFileCryptoStore version detected");
-            resetData();
-        }
-        // Check credentials
-        // The device id may not have been provided in credentials.
-        // Check it only if provided, else trust the stored one.
-        else if (!TextUtils.equals(mMetaData.mUserId, mCredentials.userId) ||
-                ((null != mCredentials.deviceId) && !TextUtils.equals(mCredentials.deviceId, mMetaData.mDeviceId))
-                ) {
-            Log.e(LOG_TAG, "## open() : Credentials do not match");
-            resetData();
-        }
+            // Check if
+            if (null == mMetaData) {
+                resetData();
+            }
+            // Check store version
+            else if (MXFILE_CRYPTO_VERSION != mMetaData.mVersion) {
+                Log.e(LOG_TAG, "## open() : New MXFileCryptoStore version detected");
+                resetData();
+            }
+            // Check credentials
+            // The device id may not have been provided in credentials.
+            // Check it only if provided, else trust the stored one.
+            else if (!TextUtils.equals(mMetaData.mUserId, mCredentials.userId) ||
+                    ((null != mCredentials.deviceId) && !TextUtils.equals(mCredentials.deviceId, mMetaData.mDeviceId))
+                    ) {
+                Log.e(LOG_TAG, "## open() : Credentials do not match");
+                resetData();
+            }
 
-        // If metaData is still defined, we can load rooms data
-        if (null != mMetaData) {
-            preloadCryptoData();
-        }
+            // If metaData is still defined, we can load rooms data
+            if (null != mMetaData) {
+                preloadCryptoData();
+            }
 
-        // Else, if credentials is valid, create and store it
-        if ((null == mMetaData)
-                && (null != mCredentials.homeServer)
-                && (null != mCredentials.userId)
-                && (null != mCredentials.accessToken)) {
-            mMetaData = new MXFileCryptoStoreMetaData2(mCredentials.userId, mCredentials.deviceId, MXFILE_CRYPTO_VERSION);
-            saveMetaData();
+            // Else, if credentials is valid, create and store it
+            if ((null == mMetaData)
+                    && (null != mCredentials.homeServer)
+                    && (null != mCredentials.userId)
+                    && (null != mCredentials.accessToken)) {
+                mMetaData = new MXFileCryptoStoreMetaData2(mCredentials.userId, mCredentials.deviceId, MXFILE_CRYPTO_VERSION);
+                mIsReady = true;
+                // flush the metadata
+                saveMetaData();
+            } else {
+                mIsReady = true;
+            }
         }
     }
 
     @Override
     public void storeDeviceId(String deviceId) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## storeDeviceId() : the store is not ready");
+            return;
+        }
+
         mMetaData.mDeviceId = deviceId;
         saveMetaData();
     }
 
     @Override
     public String getDeviceId() {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getDeviceId() : the store is not ready");
+            return null;
+        }
+
         return mMetaData.mDeviceId;
     }
 
@@ -268,8 +326,20 @@ public class MXFileCryptoStore implements IMXCryptoStore {
      * @param folder      the folder
      * @param filename    the filename
      * @param description the object description
+     * @return true if the operation succeeds
      */
-    private void storeObject(Object object, File folder, String filename, String description) {
+    private boolean storeObject(Object object, File folder, String filename, String description) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## storeObject() : the store is not ready");
+            return false;
+        }
+
+        // sanity checks
+        if ((null == object) || (null == folder) || (null == filename)) {
+            Log.e(LOG_TAG, "## storeObject() : invalid parameters");
+            return false;
+        }
+
         // ensure that the folder exists
         // it should always exist but it happened
         if (!folder.exists()) {
@@ -278,7 +348,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
             }
         }
 
-        storeObject(object, new File(folder, filename), description);
+        return storeObject(object, new File(folder, filename), description);
     }
 
     /**
@@ -287,11 +357,19 @@ public class MXFileCryptoStore implements IMXCryptoStore {
      * @param object      the object to write.
      * @param file        the file
      * @param description the object description
+     * @return true if the operation succeeds
      */
-    private void storeObject(Object object, File file, String description) {
+    private boolean storeObject(Object object, File file, String description) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## storeObject() : the store is not ready");
+            return false;
+        }
+
         if (Thread.currentThread() == Looper.getMainLooper().getThread()) {
             Log.e(LOG_TAG, "## storeObject() : should not be called in the UI thread " + description);
         }
+
+        boolean succeed = false;
 
         synchronized (LOG_TAG) {
             try {
@@ -308,6 +386,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 out.writeObject(object);
                 out.close();
 
+                succeed = true;
                 Log.d(LOG_TAG, "## storeObject () : " + description + " done in " + (System.currentTimeMillis() - t0) + " ms");
             } catch (OutOfMemoryError oom) {
                 Log.e(LOG_TAG, "storeObject failed : " + description + " -- " + oom.getMessage());
@@ -315,6 +394,8 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 Log.e(LOG_TAG, "storeObject failed : " + description + " -- " + e.getMessage());
             }
         }
+
+        return succeed;
     }
 
     /**
@@ -329,15 +410,24 @@ public class MXFileCryptoStore implements IMXCryptoStore {
             mMetaDataFile.renameTo(mMetaDataFileTmp);
         }
 
-        storeObject(mMetaData, mMetaDataFile, "saveMetaData");
-
-        if (mMetaDataFileTmp.exists()) {
-            mMetaDataFileTmp.delete();
+        if (storeObject(mMetaData, mMetaDataFile, "saveMetaData")) {
+            if (mMetaDataFileTmp.exists()) {
+                mMetaDataFileTmp.delete();
+            }
+        } else {
+            if (mMetaDataFileTmp.exists()) {
+                mMetaDataFileTmp.renameTo(mMetaDataFile);
+            }
         }
     }
 
     @Override
     public void storeAccount(OlmAccount account) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## storeAccount() : the store is not ready");
+            return;
+        }
+
         mOlmAccount = account;
 
         if (mAccountFileTmp.exists()) {
@@ -348,32 +438,31 @@ public class MXFileCryptoStore implements IMXCryptoStore {
             mAccountFile.renameTo(mAccountFileTmp);
         }
 
-        storeObject(mOlmAccount, mAccountFile, "storeAccount");
-
-        if (mAccountFileTmp.exists()) {
-            mAccountFileTmp.delete();
+        if (storeObject(mOlmAccount, mAccountFile, "storeAccount")) {
+            if (mAccountFileTmp.exists()) {
+                mAccountFileTmp.delete();
+            }
+        } else {
+            if (mAccountFileTmp.exists()) {
+                mAccountFileTmp.renameTo(mAccountFile);
+            }
         }
     }
 
     @Override
     public OlmAccount getAccount() {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getAccount() : the store is not ready");
+            return null;
+        }
+
         return mOlmAccount;
-    }
-
-    @Override
-    public void storeDeviceAnnounced() {
-        mMetaData.mDeviceAnnounced = true;
-        saveMetaData();
-    }
-
-    @Override
-    public boolean deviceAnnounced() {
-        return mMetaData.mDeviceAnnounced;
     }
 
     /**
      * Load the user devices from the filesystem
      * if it is not yet done.
+     *
      * @param userId the user id.
      */
     private void loadUserDevices(String userId) {
@@ -390,6 +479,9 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 if (devicesFile.exists()) {
                     long t0 = System.currentTimeMillis();
 
+                    // clear the corrupted flag
+                    mIsCorrupted = false;
+
                     Object devicesMapAsVoid = loadObject(devicesFile, "load devices of " + userId);
 
                     if (null != devicesMapAsVoid) {
@@ -398,6 +490,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                                 mUsersDevicesInfoMap.setObjects((Map<String, MXDeviceInfo>) devicesMapAsVoid, userId);
                             }
                         } catch (Exception e) {
+                            Log.e(LOG_TAG, "## loadUserDevices : mUsersDevicesInfoMap.setObjects failed " + e.getMessage());
                             mIsCorrupted = true;
                         }
                     }
@@ -420,6 +513,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public void storeUserDevice(String userId, MXDeviceInfo device) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## storeUserDevice() : the store is not ready");
+            return;
+        }
+
         final HashMap<String, MXDeviceInfo> devicesMap;
 
         loadUserDevices(userId);
@@ -434,6 +532,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public MXDeviceInfo getUserDevice(String deviceId, String userId) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getUserDevice() : the store is not ready");
+            return null;
+        }
+
         MXDeviceInfo deviceInfo;
 
         loadUserDevices(userId);
@@ -447,6 +550,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public void storeUserDevices(String userId, Map<String, MXDeviceInfo> devices) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## storeUserDevices() : the store is not ready");
+            return;
+        }
+
         synchronized (mUsersDevicesInfoMapLock) {
             mUsersDevicesInfoMap.setObjects(devices, userId);
         }
@@ -456,6 +564,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public Map<String, MXDeviceInfo> getUserDevices(String userId) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getUserDevices() : the store is not ready");
+            return null;
+        }
+
         if (null != userId) {
             Map<String, MXDeviceInfo> devicesMap;
 
@@ -473,6 +586,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public void storeRoomAlgorithm(String roomId, String algorithm) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## storeRoomAlgorithm() : the store is not ready");
+            return;
+        }
+
         if ((null != roomId) && (null != algorithm)) {
             mRoomsAlgorithms.put(roomId, algorithm);
 
@@ -486,17 +604,26 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 mAlgorithmsFile.renameTo(mAlgorithmsFileTmp);
             }
 
-            storeObject(mRoomsAlgorithms, mAlgorithmsFile, "storeAlgorithmForRoom - in background");
-
-            // remove the tmp file
-            if (mAlgorithmsFileTmp.exists()) {
-                mAlgorithmsFileTmp.delete();
+            if (storeObject(mRoomsAlgorithms, mAlgorithmsFile, "storeAlgorithmForRoom - in background")) {
+                // remove the tmp file
+                if (mAlgorithmsFileTmp.exists()) {
+                    mAlgorithmsFileTmp.delete();
+                }
+            } else {
+                if (mAlgorithmsFileTmp.exists()) {
+                    mAlgorithmsFileTmp.renameTo(mAlgorithmsFile);
+                }
             }
         }
     }
 
     @Override
     public String getRoomAlgorithm(String roomId) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getRoomAlgorithm() : the store is not ready");
+            return null;
+        }
+
         if (null != roomId) {
             return mRoomsAlgorithms.get(roomId);
         }
@@ -505,7 +632,74 @@ public class MXFileCryptoStore implements IMXCryptoStore {
     }
 
     @Override
+    public int getDeviceTrackingStatus(String userId, int defaultValue) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getDeviceTrackingStatus() : the store is not ready");
+            return defaultValue;
+        }
+
+        if ((null != userId) && mTrackingStatuses.containsKey(userId)) {
+            return mTrackingStatuses.get(userId);
+        } else {
+            return defaultValue;
+        }
+    }
+
+    @Override
+    public Map<String, Integer> getDeviceTrackingStatuses() {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getDeviceTrackingStatuses() : the store is not ready");
+            return null;
+        }
+
+        return new HashMap<>(mTrackingStatuses);
+    }
+
+    /**
+     * Save the tracking statuses map
+     */
+    private void saveDeviceTrackingStatuses() {
+        // delete the previous tmp
+        if (mTrackingStatusesFileTmp.exists()) {
+            mTrackingStatusesFileTmp.delete();
+        }
+
+        // copy the existing file
+        if (mTrackingStatusesFile.exists()) {
+            mTrackingStatusesFile.renameTo(mTrackingStatusesFileTmp);
+        }
+
+        if (storeObject(mTrackingStatuses, mTrackingStatusesFile, "saveDeviceTrackingStatus - in background")) {
+            // remove the tmp file
+            if (mTrackingStatusesFileTmp.exists()) {
+                mTrackingStatusesFileTmp.delete();
+            }
+        } else {
+            if (mTrackingStatusesFileTmp.exists()) {
+                mTrackingStatusesFileTmp.renameTo(mTrackingStatusesFile);
+            }
+        }
+    }
+
+    @Override
+    public void saveDeviceTrackingStatuses(Map<String, Integer> deviceTrackingStatuses) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## saveDeviceTrackingStatuses() : the store is not ready");
+            return;
+        }
+
+        mTrackingStatuses.clear();
+        mTrackingStatuses.putAll(deviceTrackingStatuses);
+        saveDeviceTrackingStatuses();
+    }
+
+    @Override
     public void storeSession(final OlmSession olmSession, final String deviceKey) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## storeSession() : the store is not ready");
+            return;
+        }
+
         String sessionIdentifier = null;
 
         if (null != olmSession) {
@@ -545,6 +739,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public Map<String, OlmSession> getDeviceSessions(String deviceKey) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## storeSession() : the store is not ready");
+            return null;
+        }
+
         if (null != deviceKey) {
             Map<String, OlmSession> map;
 
@@ -560,6 +759,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public void removeInboundGroupSession(String sessionId, String senderKey) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## removeInboundGroupSession() : the store is not ready");
+            return;
+        }
+
         if ((null != sessionId) && (null != senderKey)) {
             synchronized (mInboundGroupSessionsLock) {
                 if (mInboundGroupSessions.containsKey(senderKey)) {
@@ -588,6 +792,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public void storeInboundGroupSession(final MXOlmInboundGroupSession2 session) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## storeInboundGroupSession() : the store is not ready");
+            return;
+        }
+
         String sessionIdentifier = null;
 
         if ((null != session) && (null != session.mSenderKey) && (null != session.mSession)) {
@@ -630,11 +839,23 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public MXOlmInboundGroupSession2 getInboundGroupSession(String sessionId, String senderKey) {
-        if ((null != sessionId) && (null != senderKey) && mInboundGroupSessions.containsKey(senderKey)) {
-            MXOlmInboundGroupSession2 session;
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getInboundGroupSession() : the store is not ready");
+            return null;
+        }
 
-            synchronized (mInboundGroupSessionsLock) {
-                session = mInboundGroupSessions.get(senderKey).get(sessionId);
+        if ((null != sessionId) && (null != senderKey) && mInboundGroupSessions.containsKey(senderKey)) {
+            MXOlmInboundGroupSession2 session = null;
+
+            try {
+                synchronized (mInboundGroupSessionsLock) {
+                    session = mInboundGroupSessions.get(senderKey).get(sessionId);
+                }
+            } catch (Exception e) {
+                // it should never happen
+                // MXOlmInboundGroupSession has been replaced by MXOlmInboundGroupSession2
+                // but it seems that the application code is not properly updated (JIT issue) ?
+                Log.e(LOG_TAG, "## getInboundGroupSession() failed " + e.getMessage());
             }
 
             return session;
@@ -644,6 +865,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public List<MXOlmInboundGroupSession2> getInboundGroupSessions() {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getInboundGroupSessions() : the store is not ready");
+            return null;
+        }
+
         ArrayList<MXOlmInboundGroupSession2> inboundGroupSessions = new ArrayList<>();
 
         synchronized (mInboundGroupSessionsLock) {
@@ -687,27 +913,153 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
     @Override
     public void setGlobalBlacklistUnverifiedDevices(boolean block) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## setGlobalBlacklistUnverifiedDevices() : the store is not ready");
+            return;
+        }
+
         mMetaData.mGlobalBlacklistUnverifiedDevices = block;
         saveMetaData();
     }
 
     @Override
     public boolean getGlobalBlacklistUnverifiedDevices() {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getGlobalBlacklistUnverifiedDevices() : the store is not ready");
+            return false;
+        }
+
         return mMetaData.mGlobalBlacklistUnverifiedDevices;
     }
 
     @Override
     public void setRoomsListBlacklistUnverifiedDevices(List<String> roomIds) {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## setRoomsListBlacklistUnverifiedDevices() : the store is not ready");
+            return;
+        }
+
         mMetaData.mBlacklistUnverifiedDevicesRoomIdsList = roomIds;
         saveMetaData();
     }
 
     @Override
     public List<String> getRoomsListBlacklistUnverifiedDevices() {
+        if (!mIsReady) {
+            Log.e(LOG_TAG, "## getRoomsListBlacklistUnverifiedDevices() : the store is not ready");
+            return null;
+        }
+
         if (null == mMetaData.mBlacklistUnverifiedDevicesRoomIdsList) {
             return new ArrayList<>();
         } else {
             return new ArrayList<>(mMetaData.mBlacklistUnverifiedDevicesRoomIdsList);
+        }
+    }
+
+    /**
+     * save the outgoing room key requests.
+     */
+    private void saveOutgoingRoomKeyRequests() {
+        if (mOutgoingRoomKeyRequestsFileTmp.exists()) {
+            mOutgoingRoomKeyRequestsFileTmp.delete();
+        }
+
+        if (mOutgoingRoomKeyRequestsFile.exists()) {
+            mOutgoingRoomKeyRequestsFile.renameTo(mOutgoingRoomKeyRequestsFileTmp);
+        }
+
+        if (storeObject(mOutgoingRoomKeyRequests, mOutgoingRoomKeyRequestsFile, "saveOutgoingRoomKeyRequests")) {
+            if (mOutgoingRoomKeyRequestsFileTmp.exists()) {
+                mOutgoingRoomKeyRequestsFileTmp.delete();
+            }
+        } else {
+            if (mOutgoingRoomKeyRequestsFileTmp.exists()) {
+                mOutgoingRoomKeyRequestsFileTmp.renameTo(mOutgoingRoomKeyRequestsFile);
+            }
+        }
+    }
+
+    @Override
+    public OutgoingRoomKeyRequest getOutgoingRoomKeyRequest(Map<String, String> requestBody) {
+        if (null != requestBody) {
+            return mOutgoingRoomKeyRequests.get(requestBody);
+        }
+
+        return null;
+    }
+
+    @Override
+    public OutgoingRoomKeyRequest getOrAddOutgoingRoomKeyRequest(OutgoingRoomKeyRequest request) {
+        // sanity check
+        if ((null == request) || (null == request.mRequestBody)) {
+            return null;
+        }
+
+        // already known
+        if (mOutgoingRoomKeyRequests.containsKey(request.mRequestBody)) {
+            Log.d(LOG_TAG, "## getOrAddOutgoingRoomKeyRequest() : `already have key request outstanding for " + request.getRoomId() + " / " + request.getSessionId() + " not sending another");
+            return mOutgoingRoomKeyRequests.get(request.mRequestBody);
+        } else {
+            mOutgoingRoomKeyRequests.put(request.mRequestBody, request);
+            saveOutgoingRoomKeyRequests();
+            return request;
+        }
+    }
+
+    /**
+     * Retrieve a OutgoingRoomKeyRequest from a transaction id.
+     *
+     * @param txId the transaction id.
+     * @return the matched OutgoingRoomKeyRequest or null
+     */
+    private OutgoingRoomKeyRequest getOutgoingRoomKeyRequestByTxId(String txId) {
+        if (null != txId) {
+            Collection<OutgoingRoomKeyRequest> requests = mOutgoingRoomKeyRequests.values();
+
+            for (OutgoingRoomKeyRequest request : requests) {
+                if (TextUtils.equals(request.mRequestId, txId)) {
+                    return request;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Look for room key requests by state.
+     *
+     * @param states the states
+     * @return an OutgoingRoomKeyRequest or null
+     */
+    @Override
+    public OutgoingRoomKeyRequest getOutgoingRoomKeyRequestByState(Set<OutgoingRoomKeyRequest.RequestState> states) {
+        Collection<OutgoingRoomKeyRequest> requests = mOutgoingRoomKeyRequests.values();
+
+        for (OutgoingRoomKeyRequest request : requests) {
+            if (states.contains(request.mState)) {
+                return request;
+            }
+        }
+
+        return null;
+    }
+
+    @Override
+    public void updateOutgoingRoomKeyRequest(OutgoingRoomKeyRequest req) {
+        if (null != req) {
+            saveOutgoingRoomKeyRequests();
+        }
+    }
+
+    @Override
+    public void deleteOutgoingRoomKeyRequest(String transactionId) {
+        OutgoingRoomKeyRequest request = getOutgoingRoomKeyRequestByTxId(transactionId);
+
+        if (null != request) {
+            mOutgoingRoomKeyRequests.remove(request.mRequestBody);
+            saveOutgoingRoomKeyRequests();
         }
     }
 
@@ -761,6 +1113,8 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 object = ois.readObject();
                 ois.close();
             } catch (Exception e) {
+                Log.e(LOG_TAG, description + "failed : " + e.getMessage() + " step 1");
+
                 // if the zip deflating fails, try to use the former file saving method
                 try {
                     FileInputStream fis2 = new FileInputStream(file);
@@ -771,7 +1125,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 } catch (Exception subEx) {
                     // warn that some file loading fails
                     mIsCorrupted = true;
-                    Log.e(LOG_TAG, description + "failed : " + subEx.getMessage());
+                    Log.e(LOG_TAG, description + "failed : " + subEx.getMessage() + " step 2");
                 }
             }
         }
@@ -796,11 +1150,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 if (metadataAsVoid instanceof MXFileCryptoStoreMetaData2) {
                     mMetaData = (MXFileCryptoStoreMetaData2) metadataAsVoid;
                 } else {
-                    mMetaData = new MXFileCryptoStoreMetaData2((MXFileCryptoStoreMetaData)metadataAsVoid);
+                    mMetaData = new MXFileCryptoStoreMetaData2((MXFileCryptoStoreMetaData) metadataAsVoid);
                 }
             } catch (Exception e) {
                 mIsCorrupted = true;
-                Log.e(LOG_TAG, "## loadMetadata() : metadata has been corrupted");
+                Log.e(LOG_TAG, "## loadMetadata() : metadata has been corrupted " + e.getMessage());
             }
         }
     }
@@ -884,7 +1238,6 @@ public class MXFileCryptoStore implements IMXCryptoStore {
             algorithmsAsVoid = loadObject(mAlgorithmsFile, "preloadCryptoData - mRoomsAlgorithms");
         }
 
-
         if (null != algorithmsAsVoid) {
             try {
                 Map<String, String> algorithmsMap = (Map<String, String>) algorithmsAsVoid;
@@ -895,8 +1248,41 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 Log.e(LOG_TAG, "## preloadCryptoData() - invalid mAlgorithmsFile " + e.getMessage());
             }
         }
-        Log.d(LOG_TAG, "## preloadCryptoData() : load mRoomsAlgorithms ("+ algoSize + " algos) in " + (System.currentTimeMillis() - t2) + " ms");
+        Log.d(LOG_TAG, "## preloadCryptoData() : load mRoomsAlgorithms (" + algoSize + " algos) in " + (System.currentTimeMillis() - t2) + " ms");
 
+        Object trackingStatusesAsVoid;
+
+        if (mTrackingStatusesFileTmp.exists()) {
+            trackingStatusesAsVoid = loadObject(mTrackingStatusesFileTmp, "preloadCryptoData - mTrackingStatuses - tmp");
+        } else {
+            trackingStatusesAsVoid = loadObject(mTrackingStatusesFile, "preloadCryptoData - mTrackingStatuses");
+        }
+
+        if (null != trackingStatusesAsVoid) {
+            try {
+                mTrackingStatuses = new HashMap<>((Map<String, Integer>) trackingStatusesAsVoid);
+            } catch (Exception e) {
+                Log.e(LOG_TAG, "## preloadCryptoData() - invalid mTrackingStatuses " + e.getMessage());
+            }
+        }
+
+        File outgoingRequestFile;
+        if (mOutgoingRoomKeyRequestsFileTmp.exists()) {
+            outgoingRequestFile = mOutgoingRoomKeyRequestsFileTmp;
+        } else {
+            outgoingRequestFile = mOutgoingRoomKeyRequestsFile;
+        }
+
+        if (outgoingRequestFile.exists()) {
+            Object requestsAsVoid = loadObject(outgoingRequestFile, "get outgoing key request");
+            try {
+                if (null != requestsAsVoid) {
+                    mOutgoingRoomKeyRequests.putAll((Map<Map<String, String>, OutgoingRoomKeyRequest>) requestsAsVoid);
+                }
+            } catch (Exception e) {
+                Log.e(LOG_TAG, "## preloadCryptoData() : mOutgoingRoomKeyRequests init failed " + e.getMessage());
+            }
+        }
 
         if (mOlmSessionsFolder.exists()) {
             long t3 = System.currentTimeMillis();
@@ -997,7 +1383,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                         for (int j = 0; j < sessionIds.length; j++) {
                             File inboundSessionFile = new File(keyFolder, sessionIds[j]);
                             try {
-                                Object inboundSessionAsVoid = loadObject(inboundSessionFile, "load inboundsession");
+                                Object inboundSessionAsVoid = loadObject(inboundSessionFile, "load inboundsession " + sessionIds[j] + " ");
                                 MXOlmInboundGroupSession2 inboundSession;
 
                                 if ((null != inboundSessionAsVoid) && (inboundSessionAsVoid instanceof MXOlmInboundGroupSession)) {
@@ -1008,6 +1394,10 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
                                 if (null != inboundSession) {
                                     submap.put(decodeFilename(sessionIds[j]), inboundSession);
+                                } else {
+                                    Log.e(LOG_TAG, "## preloadCryptoData() : delete " + inboundSessionFile);
+                                    inboundSessionFile.delete();
+                                    mIsCorrupted = false;
                                 }
                                 count++;
                             } catch (Exception e) {
@@ -1020,7 +1410,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 }
             }
 
-            Log.d(LOG_TAG, "## preloadCryptoData() : load " + count +  " inboundGroupSessions in " + (System.currentTimeMillis() - t4) + " ms");
+            Log.d(LOG_TAG, "## preloadCryptoData() : load " + count + " inboundGroupSessions in " + (System.currentTimeMillis() - t4) + " ms");
         } else {
             Object inboundGroupSessionsAsVoid;
 
@@ -1082,7 +1472,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
      * @param filename the filename to encode
      * @return the encoded filename
      */
-    public static String encodeFilename(String filename) {
+    private static String encodeFilename(String filename) {
         if (null == filename) {
             return null;
         }
@@ -1110,7 +1500,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
      * @param encodedFilename the encoded filename
      * @return the decodec filename
      */
-    public static String decodeFilename(String encodedFilename) {
+    private static String decodeFilename(String encodedFilename) {
         if (null == encodedFilename) {
             return null;
         }
@@ -1131,5 +1521,186 @@ public class MXFileCryptoStore implements IMXCryptoStore {
         }
 
         return encodedFilename;
+    }
+
+
+    /**
+     * Tells if an IncomingRoomKeyRequest instance is valid
+     *
+     * @param incomingRoomKeyRequest the incomingRoomKeyRequest instance
+     * @return true if it is valid
+     */
+    private boolean isValidIncomingRoomKeyRequest(IncomingRoomKeyRequest incomingRoomKeyRequest) {
+        return (null != incomingRoomKeyRequest) &&
+                !TextUtils.isEmpty(incomingRoomKeyRequest.mUserId) &&
+                !TextUtils.isEmpty(incomingRoomKeyRequest.mDeviceId) &&
+                !TextUtils.isEmpty(incomingRoomKeyRequest.mRequestId);
+    }
+
+    @Override
+    public IncomingRoomKeyRequest getIncomingRoomKeyRequest(String userId, String deviceId, String requestId) {
+        // sanity checks
+        if (TextUtils.isEmpty(userId) || TextUtils.isEmpty(deviceId) || TextUtils.isEmpty(requestId)) {
+            return null;
+        }
+
+        if (!mPendingIncomingRoomKeyRequests.containsKey(userId)) {
+            return null;
+        }
+
+        if (!mPendingIncomingRoomKeyRequests.get(userId).containsKey(deviceId)) {
+            return null;
+        }
+
+        List<IncomingRoomKeyRequest> pendingRequests = mPendingIncomingRoomKeyRequests.get(userId).get(deviceId);
+
+        for (IncomingRoomKeyRequest request : pendingRequests) {
+            if (TextUtils.equals(requestId, request.mRequestId)) {
+                return request;
+            }
+        }
+
+        return null;
+    }
+
+    @Override
+    public List<IncomingRoomKeyRequest> getPendingIncomingRoomKeyRequests() {
+        loadIncomingRoomKeyRequests();
+
+        List<IncomingRoomKeyRequest> list = new ArrayList<>();
+
+        // userId -> deviceId -> [keyRequest]
+        Set<String> userIds = mPendingIncomingRoomKeyRequests.keySet();
+
+        for (String userId : userIds) {
+            Set<String> deviceIds = mPendingIncomingRoomKeyRequests.get(userId).keySet();
+            for (String deviceId : deviceIds) {
+                list.addAll(mPendingIncomingRoomKeyRequests.get(userId).get(deviceId));
+            }
+        }
+
+        return list;
+    }
+
+    /**
+     * Add an incomingRoomKeyRequest.
+     *
+     * @param incomingRoomKeyRequest the incomingRoomKeyRequest request
+     */
+    private void addIncomingRoomKeyRequest(IncomingRoomKeyRequest incomingRoomKeyRequest) {
+        String userId = incomingRoomKeyRequest.mUserId;
+        String deviceId = incomingRoomKeyRequest.mDeviceId;
+
+        if (!mPendingIncomingRoomKeyRequests.containsKey(userId)) {
+            mPendingIncomingRoomKeyRequests.put(userId, new HashMap<String, List<IncomingRoomKeyRequest>>());
+        }
+
+        if (!mPendingIncomingRoomKeyRequests.get(userId).containsKey(deviceId)) {
+            mPendingIncomingRoomKeyRequests.get(userId).put(deviceId, new ArrayList<IncomingRoomKeyRequest>());
+        }
+
+        mPendingIncomingRoomKeyRequests.get(userId).get(deviceId).add(incomingRoomKeyRequest);
+    }
+
+    @Override
+    public void storeIncomingRoomKeyRequest(IncomingRoomKeyRequest incomingRoomKeyRequest) {
+        loadIncomingRoomKeyRequests();
+
+        // invalid or already stored
+        if (!isValidIncomingRoomKeyRequest(incomingRoomKeyRequest) ||
+                (null != getIncomingRoomKeyRequest(incomingRoomKeyRequest.mUserId, incomingRoomKeyRequest.mDeviceId, incomingRoomKeyRequest.mRequestId))) {
+            return;
+        }
+
+        addIncomingRoomKeyRequest(incomingRoomKeyRequest);
+        saveIncomingRoomKeyRequests();
+    }
+
+    @Override
+    public void deleteIncomingRoomKeyRequest(IncomingRoomKeyRequest incomingRoomKeyRequest) {
+        loadIncomingRoomKeyRequests();
+
+        if (!isValidIncomingRoomKeyRequest(incomingRoomKeyRequest)) {
+            return;
+        }
+
+        IncomingRoomKeyRequest request = getIncomingRoomKeyRequest(incomingRoomKeyRequest.mUserId, incomingRoomKeyRequest.mDeviceId, incomingRoomKeyRequest.mRequestId);
+
+        if (null == request) {
+            return;
+        }
+
+        String userId = incomingRoomKeyRequest.mUserId;
+        String deviceId = incomingRoomKeyRequest.mDeviceId;
+
+        mPendingIncomingRoomKeyRequests.get(userId).get(deviceId).remove(request);
+
+        if (mPendingIncomingRoomKeyRequests.get(userId).get(deviceId).isEmpty()) {
+            mPendingIncomingRoomKeyRequests.get(userId).remove(deviceId);
+        }
+
+        if (mPendingIncomingRoomKeyRequests.get(userId).isEmpty()) {
+            mPendingIncomingRoomKeyRequests.remove(userId);
+        }
+
+        saveIncomingRoomKeyRequests();
+    }
+
+    /**
+     * Save the incoming key requests
+     */
+    private void saveIncomingRoomKeyRequests() {
+        // delete the previous tmp
+        if (mIncomingRoomKeyRequestsFileTmp.exists()) {
+            mIncomingRoomKeyRequestsFileTmp.delete();
+        }
+
+        // copy the existing file
+        if (mIncomingRoomKeyRequestsFile.exists()) {
+            mIncomingRoomKeyRequestsFile.renameTo(mIncomingRoomKeyRequestsFileTmp);
+        }
+
+        if (storeObject(getPendingIncomingRoomKeyRequests(), mIncomingRoomKeyRequestsFile, "savedIncomingRoomKeyRequests - in background")) {
+            // remove the tmp file
+            if (mIncomingRoomKeyRequestsFileTmp.exists()) {
+                mIncomingRoomKeyRequestsFileTmp.delete();
+            }
+        } else {
+            if (mIncomingRoomKeyRequestsFileTmp.exists()) {
+                mIncomingRoomKeyRequestsFileTmp.renameTo(mIncomingRoomKeyRequestsFile);
+            }
+        }
+    }
+
+    /**
+     * Load the incoming key requests
+     */
+    private void loadIncomingRoomKeyRequests() {
+        if (null == mPendingIncomingRoomKeyRequests) {
+            Object requestsAsVoid;
+
+            if (mIncomingRoomKeyRequestsFileTmp.exists()) {
+                requestsAsVoid = loadObject(mIncomingRoomKeyRequestsFileTmp, "loadIncomingRoomKeyRequests - tmp");
+            } else {
+                requestsAsVoid = loadObject(mIncomingRoomKeyRequestsFile, "loadIncomingRoomKeyRequests");
+            }
+
+            List<IncomingRoomKeyRequest> requests = new ArrayList<>();
+
+            if (null != requestsAsVoid) {
+                try {
+                    requests = (List<IncomingRoomKeyRequest>) requestsAsVoid;
+                } catch (Exception e) {
+                    mIncomingRoomKeyRequestsFileTmp.delete();
+                    mIncomingRoomKeyRequestsFile.delete();
+                }
+            }
+
+            mPendingIncomingRoomKeyRequests = new HashMap<>();
+
+            for (IncomingRoomKeyRequest request : requests) {
+                addIncomingRoomKeyRequest(request);
+            }
+        }
     }
 }

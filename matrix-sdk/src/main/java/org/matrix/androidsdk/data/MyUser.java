@@ -20,15 +20,13 @@ package org.matrix.androidsdk.data;
 import android.os.Handler;
 import android.os.Looper;
 
-import org.matrix.androidsdk.rest.model.RequestPhoneNumberValidationResponse;
-import org.matrix.androidsdk.util.Log;
-
 import org.matrix.androidsdk.rest.callback.ApiCallback;
 import org.matrix.androidsdk.rest.callback.SimpleApiCallback;
 import org.matrix.androidsdk.rest.model.MatrixError;
-import org.matrix.androidsdk.rest.model.ThirdPartyIdentifier;
-import org.matrix.androidsdk.rest.model.ThreePid;
 import org.matrix.androidsdk.rest.model.User;
+import org.matrix.androidsdk.rest.model.pid.ThirdPartyIdentifier;
+import org.matrix.androidsdk.rest.model.pid.ThreePid;
+import org.matrix.androidsdk.util.Log;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +36,7 @@ import java.util.List;
  */
 public class MyUser extends User {
 
-    private static final String LOG_TAG = "MyUser";
+    private static final String LOG_TAG = MyUser.class.getSimpleName();
 
     // refresh status
     private boolean mIsAvatarRefreshed = false;
@@ -49,7 +47,7 @@ public class MyUser extends User {
     // so, if there is a pending refresh the listeners are added to this list.
     private transient ArrayList<ApiCallback<Void>> mRefreshListeners;
 
-    private transient Handler mUiHandler;
+    private transient final Handler mUiHandler;
 
     // linked emails to the account
     private transient List<ThirdPartyIdentifier> mEmailIdentifiers = new ArrayList<>();
@@ -64,8 +62,9 @@ public class MyUser extends User {
 
     /**
      * Update the user's display name.
+     *
      * @param displayName the new name
-     * @param callback the async callback
+     * @param callback    the async callback
      */
     public void updateDisplayName(final String displayName, ApiCallback<Void> callback) {
         mDataHandler.getProfileRestClient().updateDisplayname(displayName, new SimpleApiCallback<Void>(callback) {
@@ -73,7 +72,7 @@ public class MyUser extends User {
             public void onSuccess(Void info) {
                 // Update the object member before calling the given callback
                 MyUser.this.displayname = displayName;
-                MyUser.this.mDataHandler.getStore().setDisplayName(displayName);
+                MyUser.this.mDataHandler.getStore().setDisplayName(displayName, System.currentTimeMillis());
                 super.onSuccess(info);
             }
         });
@@ -81,8 +80,9 @@ public class MyUser extends User {
 
     /**
      * Update the user's avatar URL.
+     *
      * @param avatarUrl the new avatar URL
-     * @param callback the async callback
+     * @param callback  the async callback
      */
     public void updateAvatarUrl(final String avatarUrl, ApiCallback<Void> callback) {
         mDataHandler.getProfileRestClient().updateAvatarUrl(avatarUrl, new SimpleApiCallback<Void>(callback) {
@@ -90,25 +90,7 @@ public class MyUser extends User {
             public void onSuccess(Void info) {
                 // Update the object member before calling the given callback
                 MyUser.this.setAvatarUrl(avatarUrl);
-                MyUser.this.mDataHandler.getStore().setAvatarURL(avatarUrl);
-                super.onSuccess(info);
-            }
-        });
-    }
-
-    /**
-     * Update the user's presence information.
-     * @param presence the presence
-     * @param statusMsg the status message
-     * @param callback the async callback
-     */
-    public void updatePresence(final String presence, final String statusMsg, ApiCallback<Void> callback) {
-        mDataHandler.getPresenceRestClient().setPresence(presence, statusMsg, new SimpleApiCallback<Void>(callback) {
-            @Override
-            public void onSuccess(Void info) {
-                // Update the object member before calling the given callback
-                MyUser.this.presence = presence;
-                MyUser.this.statusMsg = statusMsg;
+                MyUser.this.mDataHandler.getStore().setAvatarURL(avatarUrl, System.currentTimeMillis());
                 super.onSuccess(info);
             }
         });
@@ -116,23 +98,25 @@ public class MyUser extends User {
 
     /**
      * Request a validation token for an email address 3Pid
-     * @param pid the pid to retrieve a token
+     *
+     * @param pid      the pid to retrieve a token
      * @param callback the callback when the operation is done
      */
     public void requestEmailValidationToken(ThreePid pid, ApiCallback<Void> callback) {
         if (null != pid) {
-            pid.requestEmailValidationToken(mDataHandler.getThirdPidRestClient(), null, callback);
+            pid.requestEmailValidationToken(mDataHandler.getProfileRestClient(), null, false, callback);
         }
     }
 
     /**
      * Request a validation token for a phone number 3Pid
-     * @param pid the pid to retrieve a token
+     *
+     * @param pid      the pid to retrieve a token
      * @param callback the callback when the operation is done
      */
-    public void requestPhoneNumberValidationToken(ThreePid pid, ApiCallback<RequestPhoneNumberValidationResponse> callback) {
+    public void requestPhoneNumberValidationToken(ThreePid pid, ApiCallback<Void> callback) {
         if (null != pid) {
-            pid.requestPhoneNumberValidationToken(mDataHandler.getThirdPidRestClient(), null, callback);
+            pid.requestPhoneNumberValidationToken(mDataHandler.getProfileRestClient(), false, callback);
         }
     }
 
@@ -182,7 +166,7 @@ public class MyUser extends User {
      * @param pid      the pid to delete
      * @param callback the async callback
      */
-    public void delete3Pid(final ThirdPartyIdentifier pid, final ApiCallback<Void> callback){
+    public void delete3Pid(final ThirdPartyIdentifier pid, final ApiCallback<Void> callback) {
         if (null != pid) {
             mDataHandler.getProfileRestClient().delete3PID(pid, new ApiCallback<Void>() {
                 @Override
@@ -262,6 +246,7 @@ public class MyUser extends User {
 
     /**
      * Refresh the user data if it is required
+     *
      * @param callback callback when the job is done.
      */
     public void refreshUserInfos(final ApiCallback<Void> callback) {
@@ -270,6 +255,7 @@ public class MyUser extends User {
 
     /**
      * Refresh the user data if it is required
+     *
      * @param callback callback when the job is done.
      */
     public void refreshThirdPartyIdentifiers(final ApiCallback<Void> callback) {
@@ -280,8 +266,9 @@ public class MyUser extends User {
 
     /**
      * Refresh the user data if it is required
+     *
      * @param skipPendingTest true to do not check if the refreshes started (private use)
-     * @param callback callback when the job is done.
+     * @param callback        callback when the job is done.
      */
     public void refreshUserInfos(boolean skipPendingTest, final ApiCallback<Void> callback) {
         if (!skipPendingTest) {
@@ -349,7 +336,7 @@ public class MyUser extends User {
                     // local value
                     setAvatarUrl(anAvatarUrl);
                     // metadata file
-                    mDataHandler.getStore().setAvatarURL(anAvatarUrl);
+                    mDataHandler.getStore().setAvatarURL(anAvatarUrl, System.currentTimeMillis());
                     // user
                     mDataHandler.getStore().storeUser(MyUser.this);
 
@@ -403,7 +390,7 @@ public class MyUser extends User {
                     // local value
                     displayname = aDisplayname;
                     // store metadata
-                    mDataHandler.getStore().setDisplayName(aDisplayname);
+                    mDataHandler.getStore().setDisplayName(aDisplayname, System.currentTimeMillis());
 
                     mIsDisplayNameRefreshed = true;
 

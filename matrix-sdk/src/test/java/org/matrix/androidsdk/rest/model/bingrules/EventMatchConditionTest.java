@@ -15,7 +15,6 @@
  */
 package org.matrix.androidsdk.rest.model.bingrules;
 
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import org.junit.Before;
@@ -41,7 +40,7 @@ public class EventMatchConditionTest {
         event.roomId = TEST_ROOM_ID;
         event.userId = TEST_USER_ID;
         String contentJson = "{'msgtype': 'm.text', 'body': 'Nice body!', 'other_field': 'other_value'}";
-        event.content = (JsonObject) new JsonParser().parse(contentJson);
+        event.content = new JsonParser().parse(contentJson);
     }
 
     @Test

@@ -16,7 +16,6 @@
 package org.matrix.androidsdk.util;
 
 import android.text.TextUtils;
-import org.matrix.androidsdk.util.Log;
 
 import org.matrix.androidsdk.MXSession;
 import org.matrix.androidsdk.data.Room;
@@ -30,12 +29,13 @@ import java.util.regex.Pattern;
  * Utility methods for events.
  */
 public class EventUtils {
-    private static final String LOG_TAG = "EventUtils";
+    private static final String LOG_TAG = EventUtils.class.getSimpleName();
 
     /**
      * Whether the given event should be highlighted in its chat room.
+     *
      * @param session the session.
-     * @param event the event
+     * @param event   the event
      * @return whether the event is important and should be highlighted
      */
     public static boolean shouldHighlight(MXSession session, Event event) {
@@ -44,20 +44,27 @@ public class EventUtils {
             return false;
         }
 
+        boolean res = false;
+
         // search if the event fulfills a rule
         BingRule rule = session.fulfillRule(event);
 
         if (null != rule) {
-            return rule.shouldHighlight();
+            res = rule.shouldHighlight();
+
+            if (res) {
+                Log.d(LOG_TAG, "## shouldHighlight() : the event " + event.roomId + "/" + event.eventId + " is higlighted by " + rule);
+            }
         }
 
-        return false;
+        return res;
     }
 
     /**
      * Whether the given event should trigger a notification.
-     * @param session the current matrix session
-     * @param event the event
+     *
+     * @param session      the current matrix session
+     * @param event        the event
      * @param activeRoomID the RoomID of disaplyed roomActivity
      * @return true if the event should trigger a notification
      */
@@ -94,7 +101,8 @@ public class EventUtils {
 
     /**
      * Returns whether a string contains an occurrence of another, as a standalone word, regardless of case.
-     * @param subString the string to search for
+     *
+     * @param subString  the string to search for
      * @param longString the string to search in
      * @return whether a match was found
      */
@@ -107,7 +115,7 @@ public class EventUtils {
         boolean res = false;
 
         try {
-            Pattern pattern = Pattern.compile("(\\W|^)" + subString + "(\\W|$)", Pattern.CASE_INSENSITIVE);
+            Pattern pattern = Pattern.compile("(\\W|^)" + Pattern.quote(subString) + "(\\W|$)", Pattern.CASE_INSENSITIVE);
             res = pattern.matcher(longString).find();
         } catch (Exception e) {
             Log.e(LOG_TAG, "## caseInsensitiveFind() : failed");

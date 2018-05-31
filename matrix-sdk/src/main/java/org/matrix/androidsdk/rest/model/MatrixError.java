@@ -17,9 +17,14 @@ package org.matrix.androidsdk.rest.model;
 
 import android.text.TextUtils;
 
+import com.google.gson.annotations.SerializedName;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
 import okhttp3.MediaType;
 import okhttp3.ResponseBody;
-
 
 /**
  * Represents a standard error response.
@@ -36,17 +41,34 @@ public class MatrixError implements java.io.Serializable {
     public static final String ROOM_IN_USE = "M_ROOM_IN_USE";
     public static final String BAD_PAGINATION = "M_BAD_PAGINATION";
     public static final String UNAUTHORIZED = "M_UNAUTHORIZED";
+    public static final String OLD_VERSION = "M_OLD_VERSION";
+    public static final String UNRECOGNIZED = "M_UNRECOGNIZED";
 
     public static final String LOGIN_EMAIL_URL_NOT_YET = "M_LOGIN_EMAIL_URL_NOT_YET";
     public static final String THREEPID_AUTH_FAILED = "M_THREEPID_AUTH_FAILED";
+    // Error code returned by the server when no account matches the given 3pid
+    public static final String THREEPID_NOT_FOUND = "M_THREEPID_NOT_FOUND";
+    public static final String THREEPID_IN_USE = "M_THREEPID_IN_USE";
+    public static final String SERVER_NOT_TRUSTED = "M_SERVER_NOT_TRUSTED";
     public static final String TOO_LARGE = "M_TOO_LARGE";
+
+    public static final String M_CONSENT_NOT_GIVEN = "M_CONSENT_NOT_GIVEN";
 
     // custom ones
     public static final String NOT_SUPPORTED = "M_NOT_SUPPORTED";
 
+    // Define the configuration error codes.
+    // The others matrix errors are requests dedicated
+    // UNKNOWN_TOKEN : the access token is no more valid
+    // OLD_VERSION : the current SDK / application versions are too old and might trigger some unexpected errors.
+    public static final Set<String> mConfigurationErrorCodes = new HashSet<>(Arrays.asList(UNKNOWN_TOKEN, OLD_VERSION));
+
     public String errcode;
     public String error;
     public Integer retry_after_ms;
+
+    @SerializedName("consent_uri")
+    public String consentUri;
 
     // extracted from the error response
     public Integer mStatus;
@@ -63,8 +85,9 @@ public class MatrixError implements java.io.Serializable {
 
     /**
      * Creator with error description
+     *
      * @param anErrcode the error code.
-     * @param anError the error message.
+     * @param anError   the error message.
      */
     public MatrixError(String anErrcode, String anError) {
         errcode = anErrcode;
@@ -96,8 +119,8 @@ public class MatrixError implements java.io.Serializable {
     /**
      * @return true if the error code is a supported one
      */
-    public boolean isSupportedErrorCode () {
-       return   MatrixError.FORBIDDEN.equals(errcode) ||
+    public boolean isSupportedErrorCode() {
+        return MatrixError.FORBIDDEN.equals(errcode) ||
                 MatrixError.UNKNOWN_TOKEN.equals(errcode) ||
                 MatrixError.BAD_JSON.equals(errcode) ||
                 MatrixError.NOT_JSON.equals(errcode) ||
@@ -106,6 +129,18 @@ public class MatrixError implements java.io.Serializable {
                 MatrixError.USER_IN_USE.equals(errcode) ||
                 MatrixError.ROOM_IN_USE.equals(errcode) ||
                 MatrixError.TOO_LARGE.equals(errcode) ||
-                MatrixError.BAD_PAGINATION.equals(errcode);
+                MatrixError.BAD_PAGINATION.equals(errcode) ||
+                MatrixError.OLD_VERSION.equals(errcode) ||
+                MatrixError.UNRECOGNIZED.equals(errcode);
+    }
+
+    /**
+     * Tells if a matrix error code is a configuration error code.
+     *
+     * @param matrixErrorCode the matrix error code
+     * @return true if it is one
+     */
+    public static boolean isConfigurationErrorCode(String matrixErrorCode) {
+        return (null != matrixErrorCode) && mConfigurationErrorCodes.contains(matrixErrorCode);
     }
 }

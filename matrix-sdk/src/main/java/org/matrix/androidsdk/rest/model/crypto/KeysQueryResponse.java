@@ -20,7 +20,6 @@ package org.matrix.androidsdk.rest.model.crypto;
 import org.matrix.androidsdk.crypto.data.MXDeviceInfo;
 
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * This class represents the response to /keys/query request made by downloadKeysForUsers
@@ -32,7 +31,7 @@ public class KeysQueryResponse {
     public Map<String, Map<String, MXDeviceInfo>> deviceKeys;
 
     /**
-     *  The failures sorted by homeservers.
+     * The failures sorted by homeservers.
      */
     public Map<String, Map<String, Object>> failures;
 }

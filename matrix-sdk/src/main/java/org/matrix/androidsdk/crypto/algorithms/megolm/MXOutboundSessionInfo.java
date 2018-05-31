@@ -24,7 +24,7 @@ import org.matrix.androidsdk.crypto.data.MXUsersDevicesMap;
 import java.util.List;
 
 public class MXOutboundSessionInfo {
-    private static final String LOG_TAG = "MXOutboundSessionInfo";
+    private static final String LOG_TAG = MXOutboundSessionInfo.class.getSimpleName();
 
     // When the session was created
     private final long mCreationTime;
@@ -37,7 +37,7 @@ public class MXOutboundSessionInfo {
 
     // Devices with which we have shared the session key
     // userId -> {deviceId -> msgindex}
-    public MXUsersDevicesMap<Integer> mSharedWithDevices;
+    public final MXUsersDevicesMap<Integer> mSharedWithDevices;
 
     // constructor
     public MXOutboundSessionInfo(String sessionId) {

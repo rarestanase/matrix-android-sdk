@@ -1,6 +1,7 @@
 /*
  * Copyright 2014 OpenMarket Ltd
  * Copyright 2017 Vector Creations Ltd
+ * Copyright 2018 New Vector Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +19,12 @@ package org.matrix.androidsdk.rest.model;
 
 import android.text.TextUtils;
 
+import org.matrix.androidsdk.crypto.MXEventDecryptionResult;
+import org.matrix.androidsdk.rest.model.message.FileMessage;
+import org.matrix.androidsdk.rest.model.message.ImageMessage;
+import org.matrix.androidsdk.rest.model.message.Message;
+import org.matrix.androidsdk.rest.model.message.StickerMessage;
+import org.matrix.androidsdk.rest.model.message.VideoMessage;
 import org.matrix.androidsdk.util.Log;
 
 import com.google.gson.JsonElement;
@@ -37,6 +44,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -47,8 +55,8 @@ import java.util.TimeZone;
  * Generic event class with all possible fields for events.
  */
 public class Event implements Externalizable {
+    private static final String LOG_TAG = Event.class.getSimpleName();
 
-    private static final String LOG_TAG = "Event";
     private static final long serialVersionUID = -1431845331022808337L;
 
     public enum SentState {
@@ -68,6 +76,7 @@ public class Event implements Externalizable {
 
     public static final String EVENT_TYPE_PRESENCE = "m.presence";
     public static final String EVENT_TYPE_MESSAGE = "m.room.message";
+    public static final String EVENT_TYPE_STICKER = "m.sticker";
     public static final String EVENT_TYPE_MESSAGE_ENCRYPTED = "m.room.encrypted";
     public static final String EVENT_TYPE_MESSAGE_ENCRYPTION = "m.room.encryption";
     public static final String EVENT_TYPE_FEEDBACK = "m.room.message.feedback";
@@ -75,8 +84,13 @@ public class Event implements Externalizable {
     public static final String EVENT_TYPE_REDACTION = "m.room.redaction";
     public static final String EVENT_TYPE_RECEIPT = "m.receipt";
     public static final String EVENT_TYPE_TAGS = "m.tag";
-    public static final String EVENT_TYPE_NEW_DEVICE = "m.new_device";
     public static final String EVENT_TYPE_ROOM_KEY = "m.room_key";
+    public static final String EVENT_TYPE_READ_MARKER = "m.fully_read";
+    public static final String EVENT_TYPE_ROOM_PLUMBING = "m.room.plumbing";
+    public static final String EVENT_TYPE_ROOM_BOT_OPTIONS = "m.room.bot.options";
+    public static final String EVENT_TYPE_ROOM_KEY_REQUEST = "m.room_key_request";
+    public static final String EVENT_TYPE_FORWARDED_ROOM_KEY = "m.forwarded_room_key";
+    public static final String EVENT_TYPE_URL_PREVIEW = "org.matrix.room.preview_urls";
 
     // State events
     public static final String EVENT_TYPE_STATE_ROOM_NAME = "m.room.name";
@@ -91,6 +105,7 @@ public class Event implements Externalizable {
     public static final String EVENT_TYPE_STATE_ROOM_ALIASES = "m.room.aliases";
     public static final String EVENT_TYPE_STATE_CANONICAL_ALIAS = "m.room.canonical_alias";
     public static final String EVENT_TYPE_STATE_HISTORY_VISIBILITY = "m.room.history_visibility";
+    public static final String EVENT_TYPE_STATE_RELATED_GROUPS = "m.room.related_groups";
 
     // call events
     public static final String EVENT_TYPE_CALL_INVITE = "m.call.invite";
@@ -337,6 +352,14 @@ public class Event implements Externalizable {
     public JsonElement getWireContent() {
         finalizeDeserialization();
         return content;
+    }
+
+    /**
+     * @return a Json representation of the event
+     */
+    public JsonObject toJsonObject() {
+        finalizeDeserialization();
+        return JsonUtils.toJson(this);
     }
 
     /**
@@ -589,6 +612,15 @@ public class Event implements Externalizable {
     }
 
     /**
+     * Check if the current event is unsent.
+     *
+     * @return true if it is unsent.
+     */
+    public boolean isUnsent() {
+        return (mSentState == SentState.UNSENT);
+    }
+
+    /**
      * Check if the current event is sending.
      *
      * @return true if it is sending.
@@ -643,7 +675,7 @@ public class Event implements Externalizable {
                 if (null != imageMessage.getThumbnailUrl()) {
                     urls.add(imageMessage.getThumbnailUrl());
                 }
-            } else if (Message.MSGTYPE_FILE.equals(msgType) || Message.MSGTYPE_AUDIO.equals(msgType) ) {
+            } else if (Message.MSGTYPE_FILE.equals(msgType) || Message.MSGTYPE_AUDIO.equals(msgType)) {
                 FileMessage fileMessage = JsonUtils.toFileMessage(getContent());
 
                 if (null != fileMessage.getUrl()) {
@@ -655,6 +687,16 @@ public class Event implements Externalizable {
                 if (null != videoMessage.getUrl()) {
                     urls.add(videoMessage.getUrl());
                 }
+            }
+        } else if (Event.EVENT_TYPE_STICKER.equals(getType())) {
+            StickerMessage stickerMessage = JsonUtils.toStickerMessage(getContent());
+
+            if (null != stickerMessage.getUrl()) {
+                urls.add(stickerMessage.getUrl());
+            }
+
+            if (null != stickerMessage.getThumbnailUrl()) {
+                urls.add(stickerMessage.getThumbnailUrl());
             }
         }
 
@@ -803,7 +845,7 @@ public class Event implements Externalizable {
         }
 
         if (input.readBoolean()) {
-            unsigned = (UnsignedData)input.readObject();
+            unsigned = (UnsignedData) input.readObject();
         }
 
         if (input.readBoolean()) {
@@ -819,7 +861,7 @@ public class Event implements Externalizable {
         }
 
         if (input.readBoolean()) {
-            unsentMatrixError = (MatrixError)input.readObject();
+            unsentMatrixError = (MatrixError) input.readObject();
         }
 
         mSentState = (SentState) input.readObject();
@@ -1039,8 +1081,6 @@ public class Event implements Externalizable {
             allowedKeys = new ArrayList<>(Arrays.asList("type", "target_event_id"));
         } else if (TextUtils.equals(Event.EVENT_TYPE_MESSAGE_ENCRYPTED, type)) {
             mClearEvent = null;
-            mKeysProved = null;
-            mKeysClaimed = null;
             allowedKeys = null;
         } else {
             allowedKeys = null;
@@ -1072,7 +1112,7 @@ public class Event implements Externalizable {
                 try {
                     unsigned.redacted_because.content.reason = contentAsJson.get("reason").getAsString();
                 } catch (Exception e) {
-                    Log.e(LOG_TAG, "unsigned.redacted_because.content.reason failed " + e.getLocalizedMessage());
+                    Log.e(LOG_TAG, "unsigned.redacted_because.content.reason failed " + e.getMessage());
                 }
 
             }
@@ -1090,92 +1130,114 @@ public class Event implements Externalizable {
     private transient Event mClearEvent;
 
     /**
-     * The keys that must have been owned by the sender of this encrypted event.
-     *
-     * @discussion These don't necessarily have to come from this event itself, but may be
-     * implied by the cryptographic session.
+     * Curve25519 key which we believe belongs to the sender of the event.
+     * See `senderKey` property.
      */
-    private transient Map<String, String> mKeysProved;
+    private transient String mSenderCurve25519Key;
 
     /**
-     * The additional keys the sender of this encrypted event claims to possess.
-     *
-     * @discussion These don't necessarily have to come from this event itself, but may be
-     * implied by the cryptographic session.
-     * For example megolm messages don't claim keys directly, but instead
-     * inherit a claim from the olm message that established the session.
-     * The keys that must have been owned by the sender of this encrypted event.
+     * Ed25519 key which the sender of this event (for olm) or the creator of the megolm session (for megolm) claims to own.
+     * See `claimedEd25519Key` property.
      */
-    private transient Map<String, String> mKeysClaimed;
+    private transient String mClaimedEd25519Key;
 
-    // linked crypto error
+    /**
+     * Curve25519 keys of devices involved in telling us about the senderCurve25519Key and claimedEd25519Key.
+     * See `forwardingCurve25519KeyChain` property.
+     */
+    private transient List<String> mForwardingCurve25519KeyChain = new ArrayList<>();
+
+    /**
+     * Decryption error
+     */
     private MXCryptoError mCryptoError;
 
     /**
-     * True if this event is encrypted.
+     * @return true if this event is encrypted.
      */
     public boolean isEncrypted() {
         return TextUtils.equals(getWireType(), EVENT_TYPE_MESSAGE_ENCRYPTED);
     }
 
     /**
-     * The curve25519 key that sent this event.
+     * Update the clear data on this event.
+     * This is used after decrypting an event; it should not be used by applications.
+     * It fires kMXEventDidDecryptNotification.
+     *
+     * @param decryptionResult the decryption result, including the plaintext and some key info.
+     */
+    public void setClearData(MXEventDecryptionResult decryptionResult) {
+        mClearEvent = null;
+
+        if (null != decryptionResult) {
+            if (null != decryptionResult.mClearEvent) {
+                mClearEvent = JsonUtils.toEvent(decryptionResult.mClearEvent);
+            }
+
+            if (null != mClearEvent) {
+                mClearEvent.mSenderCurve25519Key = decryptionResult.mSenderCurve25519Key;
+                mClearEvent.mClaimedEd25519Key = decryptionResult.mClaimedEd25519Key;
+
+                if (null != decryptionResult.mForwardingCurve25519KeyChain) {
+                    mClearEvent.mForwardingCurve25519KeyChain = decryptionResult.mForwardingCurve25519KeyChain;
+                } else {
+                    mClearEvent.mForwardingCurve25519KeyChain = new ArrayList<>();
+                }
+            }
+
+            mCryptoError = null;
+        }
+    }
+
+    /**
+     * @return The curve25519 key that sent this event.
      */
     public String senderKey() {
-        if (null != getKeysProved()) {
-            return getKeysProved().get("curve25519");
-        } else {
-            return null;
-        }
-    }
-
-    /**
-     * @return the keys proved
-     */
-    public Map<String, String> getKeysProved() {
         if (null != mClearEvent) {
-            return mClearEvent.mKeysProved;
-        }
-
-        return mKeysProved;
-    }
-
-    /**
-     * Update the key proved
-     *
-     * @param keysProved the keys proved
-     */
-    public void setKeysProved(Map<String, String> keysProved) {
-        if (null != mClearEvent) {
-            mClearEvent.mKeysProved = keysProved;
+            return mClearEvent.mSenderCurve25519Key;
         } else {
-            mKeysProved = keysProved;
+            return mSenderCurve25519Key;
         }
     }
 
     /**
-     * @return the keys claimed map
+     * @return The additional keys the sender of this encrypted event claims to possess.
      */
     public Map<String, String> getKeysClaimed() {
-        if (null != mClearEvent) {
-            return mClearEvent.mKeysClaimed;
+        Map<String, String> res = new HashMap<>();
+
+        String claimedEd25519Key = (null != getClearEvent()) ? getClearEvent().mClaimedEd25519Key : mClaimedEd25519Key;
+
+        if (null != claimedEd25519Key) {
+            res.put("ed25519", claimedEd25519Key);
         }
 
-        return mKeysClaimed;
+        return res;
     }
 
     /**
-     * Update tke ley claimed
-     *
-     * @param keysClaimed the new key claimed map
+     * @return the claimed Ed25519 key
      */
-    public void setKeysClaimed(Map<String, String> keysClaimed) {
+    /*public String getClaimedEd25519Key() {
         if (null != mClearEvent) {
-            mClearEvent.mKeysClaimed = keysClaimed;
+            return mClearEvent.mClaimedEd25519Key;
         } else {
-            mKeysClaimed = keysClaimed;
+            return mClaimedEd25519Key;
         }
-    }
+    }*/
+
+    /**
+     * @return Get the curve25519 keys of the devices which were involved in telling us about the claimedEd25519Key and sender curve25519 key.
+     */
+    /*public List<String> getForwardingCurve25519KeyChain() {
+        List<String> res = (null != mClearEvent) ? mClearEvent.mForwardingCurve25519KeyChain : mForwardingCurve25519KeyChain;
+
+        if (null == res) {
+            res = new ArrayList<>();
+        }
+
+        return res;
+    }*/
 
     /**
      * @return the linked crypto error
@@ -1191,15 +1253,9 @@ public class Event implements Externalizable {
      */
     public void setCryptoError(MXCryptoError error) {
         mCryptoError = error;
-    }
-
-    /**
-     * Update the clear event
-     *
-     * @param aClearEvent the clean event.
-     */
-    public void setClearEvent(Event aClearEvent) {
-        mClearEvent = aClearEvent;
+        if (null != error) {
+            mClearEvent = null;
+        }
     }
 
     /**

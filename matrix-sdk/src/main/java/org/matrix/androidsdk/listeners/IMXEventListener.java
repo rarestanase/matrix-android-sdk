@@ -65,8 +65,9 @@ public interface IMXEventListener {
 
     /**
      * The live events from a chunk are performed.
+     *
      * @param fromToken the start sync token
-     * @param toToken the up-to sync token
+     * @param toToken   the up-to sync token
      */
     void onLiveEventsChunkProcessed(String fromToken, String toToken);
 
@@ -82,11 +83,20 @@ public interface IMXEventListener {
     void onBingEvent(Event event, RoomState roomState, BingRule bingRule);
 
     /**
-     * An event has been successfully encrypted.
+     * The state of an event has been updated.
      *
-     * @param event the encrypted event
+     * @param event the event
      */
-    void onEventEncrypted(Event event);
+    void onEventSentStateUpdated(Event event);
+
+    /**
+     * An event has been sent.
+     * prevEventId defines the event id set before getting the server new one.
+     *
+     * @param event       the event
+     * @param prevEventId the previous eventId
+     */
+    void onEventSent(Event event, String prevEventId);
 
     /**
      * An event has been decrypted
@@ -96,26 +106,13 @@ public interface IMXEventListener {
     void onEventDecrypted(Event event);
 
     /**
-     * An event has been sent.
-     *
-     * @param event the event
-     */
-    void onSentEvent(Event event);
-
-    /**
-     * The event fails to be sent.
-     *
-     * @param event the event
-     */
-    void onFailedSendingEvent(Event event);
-
-    /**
      * The bing rules have been updated
      */
     void onBingRulesUpdate();
 
     /**
      * The initial sync is complete and the store can be queried for current state.
+     *
      * @param toToken the up-to sync token
      */
     void onInitialSyncComplete(String toToken);
@@ -164,11 +161,26 @@ public interface IMXEventListener {
     void onRoomInternalUpdate(String roomId);
 
     /**
+     * The notification count of a dedicated room
+     * has been updated.
+     *
+     * @param roomId the room ID
+     */
+    void onNotificationCountUpdate(String roomId);
+
+    /**
      * The user left the room.
      *
      * @param roomId the roomID
      */
     void onLeaveRoom(String roomId);
+
+    /**
+     * The user has been kicked or banned.
+     *
+     * @param roomId the roomID
+     */
+    void onRoomKick(String roomId);
 
     /**
      * A receipt event has been received.
@@ -187,10 +199,66 @@ public interface IMXEventListener {
     void onRoomTagEvent(String roomId);
 
     /**
+     * A read marker has been updated
+     *
+     * @param roomId thr room id.
+     */
+    void onReadMarkerEvent(String roomId);
+
+    /**
      * An event was sent to the current device.
      *
      * @param event the event
      */
     void onToDeviceEvent(Event event);
+
+    /**
+     * The user has been invited to a new group.
+     *
+     * @param groupId the group id
+     */
+    void onNewGroupInvitation(String groupId);
+
+    /**
+     * A group has been joined.
+     *
+     * @param groupId the group id
+     */
+    void onJoinGroup(String groupId);
+
+    /**
+     * A group has been left.
+     *
+     * @param groupId the group id
+     */
+    void onLeaveGroup(String groupId);
+
+    /**
+     * The group file has been updated.
+     *
+     * @param groupId the group id
+     */
+    void onGroupProfileUpdate(String groupId);
+
+    /**
+     * The group rooms list has been updated.
+     *
+     * @param groupId the group id
+     */
+    void onGroupRoomsListUpdate(String groupId);
+
+    /**
+     * The group users id list has been updated.
+     *
+     * @param groupId the group id
+     */
+    void onGroupUsersListUpdate(String groupId);
+
+    /**
+     * The group invited users id list has been updated.
+     *
+     * @param groupId the group id
+     */
+    void onGroupInvitedUsersListUpdate(String groupId);
 }
 

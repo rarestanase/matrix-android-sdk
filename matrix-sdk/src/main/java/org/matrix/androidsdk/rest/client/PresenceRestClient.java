@@ -15,7 +15,7 @@
  */
 package org.matrix.androidsdk.rest.client;
 
-import org.matrix.androidsdk.HomeserverConnectionConfig;
+import org.matrix.androidsdk.HomeServerConnectionConfig;
 import org.matrix.androidsdk.RestClient;
 import org.matrix.androidsdk.rest.api.PresenceApi;
 import org.matrix.androidsdk.rest.callback.ApiCallback;
@@ -30,34 +30,14 @@ public class PresenceRestClient extends RestClient<PresenceApi> {
     /**
      * {@inheritDoc}
      */
-    public PresenceRestClient(HomeserverConnectionConfig hsConfig) {
+    public PresenceRestClient(HomeServerConnectionConfig hsConfig) {
         super(hsConfig, PresenceApi.class, RestClient.URI_API_PREFIX_PATH_R0, false);
     }
 
     /**
-     * Set this user's presence.
-     * @param presence the presence state
-     * @param statusMsg a status message
-     * @param callback on success callback
-     */
-    public void setPresence(final String presence, final String statusMsg, final ApiCallback<Void> callback) {
-        final String description = "setPresence presence : " + presence + " statusMsg " + statusMsg;
-
-        User userPresence = new User();
-        userPresence.presence = presence;
-        userPresence.statusMsg = statusMsg;
-
-        mApi.presenceStatus(mCredentials.userId, userPresence).enqueue(new RestAdapterCallback<Void>(description, mUnsentEventsManager, callback, new RestAdapterCallback.RequestRetryCallBack() {
-            @Override
-            public void onRetry() {
-                setPresence(presence, statusMsg, callback);
-            }
-        }));
-    }
-
-    /**
      * Get a user's presence state.
-     * @param userId the user id
+     *
+     * @param userId   the user id
      * @param callback on success callback containing a User object with populated presence and statusMsg fields
      */
     public void getPresence(final String userId, final ApiCallback<User> callback) {

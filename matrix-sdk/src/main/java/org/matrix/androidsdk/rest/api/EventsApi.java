@@ -17,12 +17,14 @@
 package org.matrix.androidsdk.rest.api;
 
 import org.matrix.androidsdk.RestClient;
-import org.matrix.androidsdk.rest.model.PublicRoomsParams;
-import org.matrix.androidsdk.rest.model.PublicRoomsResponse;
-import org.matrix.androidsdk.rest.model.Search.SearchParams;
-import org.matrix.androidsdk.rest.model.Search.SearchResponse;
-import org.matrix.androidsdk.rest.model.Sync.SyncResponse;
-import org.matrix.androidsdk.rest.model.ThirdPartyProtocol;
+import org.matrix.androidsdk.rest.model.pid.ThirdPartyProtocol;
+import org.matrix.androidsdk.rest.model.publicroom.PublicRoomsParams;
+import org.matrix.androidsdk.rest.model.publicroom.PublicRoomsResponse;
+import org.matrix.androidsdk.rest.model.search.SearchParams;
+import org.matrix.androidsdk.rest.model.search.SearchResponse;
+import org.matrix.androidsdk.rest.model.search.SearchUsersParams;
+import org.matrix.androidsdk.rest.model.search.SearchUsersRequestResponse;
+import org.matrix.androidsdk.rest.model.sync.SyncResponse;
 
 import java.util.Map;
 
@@ -49,11 +51,9 @@ public interface EventsApi {
 
     /**
      * Get the third party server protocols.
-     *
-     * @param callback The asynchronous callback to call when finished
      */
     @GET(RestClient.URI_API_PREFIX_PATH_UNSTABLE + "thirdparty/protocols")
-    void thirdpartyProtocols(Callback<Map<String, ThirdPartyProtocol>> callback);
+    Call<Map<String, ThirdPartyProtocol>> thirdPartyProtocols();
 
     /**
      * Get the list of public rooms.
@@ -62,13 +62,31 @@ public interface EventsApi {
      * @param publicRoomsParams the request params
      */
     @POST(RestClient.URI_API_PREFIX_PATH_R0 + "publicRooms")
-    Call<PublicRoomsResponse> publicRooms(@Body PublicRoomsParams publicRoomsParams);
+    Call<PublicRoomsResponse> publicRooms(@Query("server") String server, @Body PublicRoomsParams publicRoomsParams);
 
     /**
      * Perform a search.
      *
      * @param searchParams the search params.
+     * @param nextBatch    the next batch token
      */
     @POST(RestClient.URI_API_PREFIX_PATH_R0 + "search")
-    Call<SearchResponse> search(@Body SearchParams searchParams, @Query("next_batch") String nextBatch);
+    Call<SearchResponse> searchEvents(@Body SearchParams searchParams, @Query("next_batch") String nextBatch);
+
+    /**
+     * Perform an users search.
+     *
+     * @param searchUsersParams the search params.
+     */
+    @POST(RestClient.URI_API_PREFIX_PATH_R0 + "/user_directory/search")
+    Call<SearchUsersRequestResponse> searchUsers(@Body SearchUsersParams searchUsersParams);
+
+    /**
+     * Retrieve the preview information of an URL.
+     *
+     * @param url      the URL
+     * @param ts       the ts
+     */
+    @GET(RestClient.URI_API_PREFIX_PATH_MEDIA_R0 + "/preview_url")
+    Call<Map<String, Object>> getURLPreview(@Query("url") String url, @Query("ts") long ts);
 }

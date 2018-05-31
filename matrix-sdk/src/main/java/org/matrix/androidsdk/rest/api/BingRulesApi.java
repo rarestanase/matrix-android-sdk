@@ -15,7 +15,8 @@
  */
 package org.matrix.androidsdk.rest.api;
 
-import org.matrix.androidsdk.rest.model.bingrules.BingRule;
+import com.google.gson.JsonElement;
+
 import org.matrix.androidsdk.rest.model.bingrules.BingRulesResponse;
 
 import retrofit2.Call;
@@ -27,35 +28,48 @@ import retrofit2.http.Path;
 
 public interface BingRulesApi {
 
+    // TODO Add Javadoc
     @GET("pushrules/")
     Call<BingRulesResponse> getAllBingRules();
 
     /**
      * Update the ruleID enable status
-     * @param kind the notification kind (sender, room...)
-     * @param ruleId the ruleId
-     * @param enable the new enable status
+     *
+     * @param kind     the notification kind (sender, room...)
+     * @param ruleId   the ruleId
+     * @param enable   the new enable status
      */
     @PUT("pushrules/global/{kind}/{ruleId}/enabled")
     Call<Void> updateEnableRuleStatus(@Path("kind") String kind, @Path("ruleId") String ruleId, @Body Boolean enable);
 
+
     /**
      * Update the ruleID enable status
-     * @param kind the notification kind (sender, room...)
-     * @param ruleId the ruleId
+     *
+     * @param kind     the notification kind (sender, room...)
+     * @param ruleId   the ruleId
+     * @param actions  the actions
+     */
+    @PUT("pushrules/global/{kind}/{ruleId}/actions")
+    Call<Void> updateRuleActions(@Path("kind") String kind, @Path("ruleId") String ruleId, @Body Object actions);
+
+
+    /**
+     * Update the ruleID enable status
+     *
+     * @param kind     the notification kind (sender, room...)
+     * @param ruleId   the ruleId
      */
     @DELETE("pushrules/global/{kind}/{ruleId}")
     Call<Void> deleteRule(@Path("kind") String kind, @Path("ruleId") String ruleId);
 
     /**
      * Add the ruleID enable status
-     * @param kind the notification kind (sender, room...)
-     * @param ruleId the ruleId.
-     * @param rule the rule to add.
+     *
+     * @param kind     the notification kind (sender, room...)
+     * @param ruleId   the ruleId.
+     * @param rule     the rule to add.
      */
     @PUT("pushrules/global/{kind}/{ruleId}")
-    Call<Void> addRule(@Path("kind") String kind, @Path("ruleId") String ruleId, @Body BingRule rule);
-
-
-
+    Call<Void> addRule(@Path("kind") String kind, @Path("ruleId") String ruleId, @Body JsonElement rule);
 }

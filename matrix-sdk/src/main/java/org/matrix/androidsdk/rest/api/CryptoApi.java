@@ -16,9 +16,10 @@
  */
 package org.matrix.androidsdk.rest.api;
 
-import org.matrix.androidsdk.rest.model.DeleteDeviceParams;
-import org.matrix.androidsdk.rest.model.DevicesListResponse;
-import org.matrix.androidsdk.rest.model.KeyChangesResponse;
+
+import org.matrix.androidsdk.rest.model.pid.DeleteDeviceParams;
+import org.matrix.androidsdk.rest.model.sync.DevicesListResponse;
+import org.matrix.androidsdk.rest.model.crypto.KeyChangesResponse;
 import org.matrix.androidsdk.rest.model.crypto.KeysClaimResponse;
 import org.matrix.androidsdk.rest.model.crypto.KeysQueryResponse;
 import org.matrix.androidsdk.rest.model.crypto.KeysUploadResponse;
@@ -45,8 +46,9 @@ public interface CryptoApi {
 
     /**
      * Upload device and/or one-time keys.
+     *
      * @param deviceId the deviceId
-     * @param params the params.
+     * @param params   the params.
      */
     @POST("keys/upload/{deviceId}")
     Call<KeysUploadResponse> uploadKeys(@Path("deviceId") String deviceId, @Body Map<String, Object> params);
@@ -67,12 +69,13 @@ public interface CryptoApi {
 
     /**
      * Send an event to a specific list of devices
-     * @param eventType the type of event to send
-     * @param randomTransactionId the random path item
-     * @param params the params
+     *
+     * @param eventType     the type of event to send
+     * @param transactionId the random path item
+     * @param params        the params
      */
     @PUT("sendToDevice/{eventType}/{random}")
-    Call<Void> sendToDevice(@Path("eventType") String eventType, @Path("random") int randomTransactionId, @Body Map<String, Object> params);
+    Call<Void> sendToDevice(@Path("eventType") String eventType, @Path("random") String transactionId, @Body Map<String, Object> params);
 
     /**
      * Get the devices list
@@ -82,22 +85,25 @@ public interface CryptoApi {
 
     /**
      * Delete a device.
+     *
      * @param deviceId the device id
-     * @param params the deletion parameters
+     * @param params   the deletion parameters
      */
     @HTTP(path = "devices/{device_id}", method = "DELETE", hasBody = true)
     Call<Void> deleteDevice(@Path("device_id") String deviceId, @Body DeleteDeviceParams params);
 
     /**
      * Update the device information.
+     *
      * @param deviceId the device id
-     * @param params the params
+     * @param params   the params
      */
     @PUT("devices/{device_id}")
     Call<Void> updateDeviceInfo(@Path("device_id") String deviceId, @Body Map<String, String> params);
 
     /**
      * Get the update devices list from two sync token.
+     *
      * @param oldToken the start token.
      * @param newToken the up-to token.
      */

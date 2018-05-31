@@ -15,7 +15,6 @@
  */
 package org.matrix.androidsdk.rest.model.bingrules;
 
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import org.junit.Before;
@@ -42,7 +41,7 @@ public class ContainsDisplayNameConditionTest {
 
     private void setEventMessage(String type, String rest) {
         String contentJson = "{'msgtype': '" + type + "', " + rest + "}";
-        event.content = (JsonObject) new JsonParser().parse(contentJson);
+        event.content = new JsonParser().parse(contentJson);
     }
 
     private void setEventTextMessageBody(String body) {
