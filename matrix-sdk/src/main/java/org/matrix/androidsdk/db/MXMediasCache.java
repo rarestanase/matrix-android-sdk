@@ -351,7 +351,7 @@ public class MXMediasCache {
      * @return the media file it is found
      */
     @Nullable
-    private File mediaCacheFile(String url, int width, int height, String mimeType) {
+    public File mediaCacheFile(String url, int width, int height, String mimeType) {
         // sanity check
         if (null == url) {
             return null;
