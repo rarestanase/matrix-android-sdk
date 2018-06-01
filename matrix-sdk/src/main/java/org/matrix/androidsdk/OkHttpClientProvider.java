@@ -160,11 +160,6 @@ public final class OkHttpClientProvider {
 
                 // Add the access token to all requests if it is set
                 if ((credentials != null) && (credentials.accessToken != null)) {
-                    newRequestBuilder.addHeader("Authorization", "Bearer " + credentials.accessToken);
-                }
-
-                // Add the access token to all requests if it is set
-                if ((credentials != null) && (credentials.accessToken != null)) {
                     HttpUrl url = request
                         .url()
                         .newBuilder()
