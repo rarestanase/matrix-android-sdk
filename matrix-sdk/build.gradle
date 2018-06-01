@@ -131,10 +131,10 @@ dependencies {
     implementation 'com.facebook.stetho:stetho:1.5.0'
     implementation 'com.facebook.stetho:stetho-okhttp3:1.5.0'
 
-    implementation(name: 'olm-sdk', ext: 'aar')
+    compileOnly(name: 'olm-sdk', ext: 'aar')
 
     // replace the compile 'io.pristine:libjingle:9690@aar'
-    implementation(name: 'react-native-webrtc', ext: 'aar')
+    compileOnly(name: 'react-native-webrtc', ext: 'aar')
 
     // Robolectric
     testImplementation 'com.android.support.test:runner:0.5'
