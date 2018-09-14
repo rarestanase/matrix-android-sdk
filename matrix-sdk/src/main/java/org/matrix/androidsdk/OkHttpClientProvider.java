@@ -1,5 +1,7 @@
 package org.matrix.androidsdk;
 
+import android.support.annotation.Nullable;
+
 import com.facebook.stetho.okhttp3.StethoInterceptor;
 
 import org.matrix.androidsdk.rest.client.MXRestExecutorService;
@@ -14,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 
 import okhttp3.CertificatePinner;
 import okhttp3.Dispatcher;
+import okhttp3.EventListener;
 import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
@@ -36,6 +39,7 @@ public final class OkHttpClientProvider {
     private static OkHttpClient downloadOkHttpClient;
     private static int uploadParametersHash = 0;
     private static OkHttpClient uploadOkHttpClient;
+    private static EventListener.Factory eventListenerFactory;
 
 
     private OkHttpClientProvider() {
@@ -99,6 +103,7 @@ public final class OkHttpClientProvider {
     ) {
         OkHttpClient.Builder okHttpClientBuilder = new OkHttpClient()
             .newBuilder()
+            .eventListenerFactory(eventListenerFactory)
             .connectTimeout(CONNECTION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .writeTimeout(WRITE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
@@ -235,5 +240,11 @@ public final class OkHttpClientProvider {
                 }
             }
         };
+    }
+
+    public static void setEventListenerFactory(
+        @Nullable EventListener.Factory eventListenerFactory
+    ) {
+        OkHttpClientProvider.eventListenerFactory = eventListenerFactory;
     }
 }
