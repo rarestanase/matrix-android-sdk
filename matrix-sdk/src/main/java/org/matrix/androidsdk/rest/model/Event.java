@@ -17,23 +17,25 @@
  */
 package org.matrix.androidsdk.rest.model;
 
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
-
-import org.matrix.androidsdk.crypto.MXEventDecryptionResult;
-import org.matrix.androidsdk.rest.model.message.FileMessage;
-import org.matrix.androidsdk.rest.model.message.ImageMessage;
-import org.matrix.androidsdk.rest.model.message.Message;
-import org.matrix.androidsdk.rest.model.message.StickerMessage;
-import org.matrix.androidsdk.rest.model.message.VideoMessage;
-import org.matrix.androidsdk.util.Log;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import org.matrix.androidsdk.crypto.MXCryptoError;
+import org.matrix.androidsdk.crypto.MXEventDecryptionResult;
 import org.matrix.androidsdk.db.MXMediasCache;
+import org.matrix.androidsdk.rest.model.crypto.EncryptedFileInfo;
+import org.matrix.androidsdk.rest.model.message.FileMessage;
+import org.matrix.androidsdk.rest.model.message.ImageMessage;
+import org.matrix.androidsdk.rest.model.message.LocationMessage;
+import org.matrix.androidsdk.rest.model.message.Message;
+import org.matrix.androidsdk.rest.model.message.StickerMessage;
+import org.matrix.androidsdk.rest.model.message.VideoMessage;
 import org.matrix.androidsdk.util.JsonUtils;
+import org.matrix.androidsdk.util.Log;
 
 import java.io.Externalizable;
 import java.io.IOException;
@@ -103,6 +105,7 @@ public class Event implements Externalizable {
     public static final String EVENT_TYPE_STATE_ROOM_GUEST_ACCESS = "m.room.guest_access";
     public static final String EVENT_TYPE_STATE_ROOM_POWER_LEVELS = "m.room.power_levels";
     public static final String EVENT_TYPE_STATE_ROOM_ALIASES = "m.room.aliases";
+    public static final String EVENT_TYPE_STATE_ROOM_TOMBSTONE = "m.room.tombstone";
     public static final String EVENT_TYPE_STATE_CANONICAL_ALIAS = "m.room.canonical_alias";
     public static final String EVENT_TYPE_STATE_HISTORY_VISIBILITY = "m.room.history_visibility";
     public static final String EVENT_TYPE_STATE_RELATED_GROUPS = "m.room.related_groups";
@@ -115,7 +118,12 @@ public class Event implements Externalizable {
 
     public static final long DUMMY_EVENT_AGE = Long.MAX_VALUE - 1;
 
+    /**
+     * Type of the event
+     * Warning, consider using {@link #getType()} to get the type of the unencrypted event
+     */
     public String type;
+
     public transient JsonElement content = null;
     private String contentAsString = null;
 
@@ -365,10 +373,11 @@ public class Event implements Externalizable {
     /**
      * @return the content casted as JsonObject.
      */
+    @Nullable
     public JsonObject getContentAsJsonObject() {
         JsonElement cont = getContent();
 
-        if ((null != cont) && cont.isJsonObject()) {
+        if (null != cont && cont.isJsonObject()) {
             return cont.getAsJsonObject();
         }
         return null;
@@ -639,12 +648,20 @@ public class Event implements Externalizable {
     }
 
     /**
-     * Tells if the message sending failed because some unknown devices have benn detected.
+     * Tells if the message sending failed because some unknown devices have been detected.
      *
-     * @return true if some unknown devices have benn detected.
+     * @return true if some unknown devices have been detected.
      */
-    public boolean isUnkownDevice() {
+    public boolean isUnknownDevice() {
         return (mSentState == SentState.FAILED_UNKNOWN_DEVICES);
+    }
+
+    /**
+     * @deprecated call isUnknownDevice()
+     */
+    @Deprecated
+    public boolean isUnkownDevice() {
+        return isUnknownDevice();
     }
 
     /**
@@ -660,7 +677,7 @@ public class Event implements Externalizable {
      * @return the media URLs defined in the event.
      */
     public List<String> getMediaUrls() {
-        ArrayList<String> urls = new ArrayList<>();
+        List<String> urls = new ArrayList<>();
 
         if (Event.EVENT_TYPE_MESSAGE.equals(getType())) {
             String msgType = JsonUtils.getMessageMsgType(getContent());
@@ -671,7 +688,6 @@ public class Event implements Externalizable {
                 if (null != imageMessage.getUrl()) {
                     urls.add(imageMessage.getUrl());
                 }
-
                 if (null != imageMessage.getThumbnailUrl()) {
                     urls.add(imageMessage.getThumbnailUrl());
                 }
@@ -687,6 +703,15 @@ public class Event implements Externalizable {
                 if (null != videoMessage.getUrl()) {
                     urls.add(videoMessage.getUrl());
                 }
+                if (null != videoMessage.getThumbnailUrl()) {
+                    urls.add(videoMessage.getThumbnailUrl());
+                }
+            } else if (Message.MSGTYPE_LOCATION.equals(msgType)) {
+                LocationMessage locationMessage = JsonUtils.toLocationMessage(getContent());
+
+                if (null != locationMessage.thumbnail_url) {
+                    urls.add(locationMessage.thumbnail_url);
+                }
             }
         } else if (Event.EVENT_TYPE_STICKER.equals(getType())) {
             StickerMessage stickerMessage = JsonUtils.toStickerMessage(getContent());
@@ -701,6 +726,59 @@ public class Event implements Externalizable {
         }
 
         return urls;
+    }
+
+    /**
+     * @return all the encrypted file infos defined in the event.
+     */
+    public List<EncryptedFileInfo> getEncryptedFileInfos() {
+        List<EncryptedFileInfo> encryptedFileInfos = new ArrayList<>();
+
+        if (!isEncrypted()) {
+            // return empty array
+            return encryptedFileInfos;
+        }
+
+        if (Event.EVENT_TYPE_MESSAGE.equals(getType())) {
+            String msgType = JsonUtils.getMessageMsgType(getContent());
+
+            if (Message.MSGTYPE_IMAGE.equals(msgType)) {
+                ImageMessage imageMessage = JsonUtils.toImageMessage(getContent());
+
+                if (null != imageMessage.file) {
+                    encryptedFileInfos.add(imageMessage.file);
+                }
+                if (null != imageMessage.info && null != imageMessage.info.thumbnail_file) {
+                    encryptedFileInfos.add(imageMessage.info.thumbnail_file);
+                }
+            } else if (Message.MSGTYPE_FILE.equals(msgType) || Message.MSGTYPE_AUDIO.equals(msgType)) {
+                FileMessage fileMessage = JsonUtils.toFileMessage(getContent());
+
+                if (null != fileMessage.file) {
+                    encryptedFileInfos.add(fileMessage.file);
+                }
+            } else if (Message.MSGTYPE_VIDEO.equals(msgType)) {
+                VideoMessage videoMessage = JsonUtils.toVideoMessage(getContent());
+
+                if (null != videoMessage.file) {
+                    encryptedFileInfos.add(videoMessage.file);
+                }
+                if (null != videoMessage.info && null != videoMessage.info.thumbnail_file) {
+                    encryptedFileInfos.add(videoMessage.info.thumbnail_file);
+                }
+            }
+        } else if (Event.EVENT_TYPE_STICKER.equals(getType())) {
+            StickerMessage stickerMessage = JsonUtils.toStickerMessage(getContent());
+
+            if (null != stickerMessage.file) {
+                encryptedFileInfos.add(stickerMessage.file);
+            }
+            if (null != stickerMessage.info && null != stickerMessage.info.thumbnail_file) {
+                encryptedFileInfos.add(stickerMessage.info.thumbnail_file);
+            }
+        }
+
+        return encryptedFileInfos;
     }
 
     /**
@@ -740,23 +818,22 @@ public class Event implements Externalizable {
     }
 
     @Override
-    public java.lang.String toString() {
-
+    public String toString() {
         // build the string by hand
         String text = "{\n";
 
         text += "  \"age\" : " + age + ",\n";
 
-        text += "  \"content\" {\n";
+        text += "  \"content\": {\n";
 
         if (null != getWireContent()) {
             if (getWireContent().isJsonArray()) {
                 for (JsonElement e : getWireContent().getAsJsonArray()) {
-                    text += "   " + e.toString() + "\n,";
+                    text += "    " + e.toString() + ",\n";
                 }
             } else if (getWireContent().isJsonObject()) {
                 for (Map.Entry<String, JsonElement> e : getWireContent().getAsJsonObject().entrySet()) {
-                    text += "    \"" + e.getKey() + ": " + e.getValue().toString() + ",\n";
+                    text += "    \"" + e.getKey() + "\": " + e.getValue().toString() + ",\n";
                 }
             } else {
                 text += getWireContent().toString();
@@ -769,11 +846,12 @@ public class Event implements Externalizable {
         text += "  \"originServerTs\": " + originServerTs + ",\n";
         text += "  \"roomId\": \"" + roomId + "\",\n";
         text += "  \"type\": \"" + type + "\",\n";
-        text += "  \"userId\": \"" + userId + "\"\n";
-        text += "  \"sender\": \"" + sender + "\"\n";
+        text += "  \"userId\": \"" + userId + "\",\n";
+        text += "  \"sender\": \"" + sender + "\",\n";
 
+        text += "}";
 
-        text += "  \"\n\n Sent state : ";
+        text += "\n\n Sent state : ";
 
         if (mSentState == SentState.UNSENT) {
             text += "UNSENT";
@@ -789,8 +867,6 @@ public class Event implements Externalizable {
             text += "FAILED UNKNOWN DEVICES";
         }
 
-        text += "\n\n";
-
         if (null != unsentException) {
             text += "\n\n Exception reason: " + unsentException.getMessage() + "\n";
         }
@@ -798,8 +874,6 @@ public class Event implements Externalizable {
         if (null != unsentMatrixError) {
             text += "\n\n Matrix reason: " + unsentMatrixError.getLocalizedMessage() + "\n";
         }
-
-        text += "}";
 
         return text;
     }
@@ -997,7 +1071,7 @@ public class Event implements Externalizable {
             try {
                 content = new JsonParser().parse(contentAsString).getAsJsonObject();
             } catch (Exception e) {
-                Log.e(LOG_TAG, "finalizeDeserialization : contentAsString deserialization " + e.getMessage());
+                Log.e(LOG_TAG, "finalizeDeserialization : contentAsString deserialization " + e.getMessage(), e);
                 contentAsString = null;
             }
         }
@@ -1006,7 +1080,7 @@ public class Event implements Externalizable {
             try {
                 prev_content = new JsonParser().parse(prev_content_as_string).getAsJsonObject();
             } catch (Exception e) {
-                Log.e(LOG_TAG, "finalizeDeserialization : prev_content_as_string deserialization " + e.getMessage());
+                Log.e(LOG_TAG, "finalizeDeserialization : prev_content_as_string deserialization " + e.getMessage(), e);
                 prev_content_as_string = null;
             }
         }
@@ -1019,7 +1093,7 @@ public class Event implements Externalizable {
      * @param allowedKeys the allowed keys list.
      * @return the filtered JsonObject
      */
-    private static JsonObject filterInContentWithKeys(JsonObject aContent, ArrayList<String> allowedKeys) {
+    private static JsonObject filterInContentWithKeys(JsonObject aContent, List<String> allowedKeys) {
         // sanity check
         if (null == aContent) {
             return null;
@@ -1054,7 +1128,7 @@ public class Event implements Externalizable {
      */
     public void prune(Event redactionEvent) {
         // Filter in event by keeping only the following keys
-        ArrayList<String> allowedKeys;
+        List<String> allowedKeys;
 
         // Add filtered content, allowed keys in content depends on the event type
         if (TextUtils.equals(Event.EVENT_TYPE_STATE_ROOM_MEMBER, type)) {
@@ -1086,11 +1160,11 @@ public class Event implements Externalizable {
             allowedKeys = null;
         }
 
-        this.content = filterInContentWithKeys(getContentAsJsonObject(), allowedKeys);
-        this.prev_content = filterInContentWithKeys(getPrevContentAsJsonObject(), allowedKeys);
+        content = filterInContentWithKeys(getContentAsJsonObject(), allowedKeys);
+        prev_content = filterInContentWithKeys(getPrevContentAsJsonObject(), allowedKeys);
 
-        this.prev_content_as_string = null;
-        this.contentAsString = null;
+        prev_content_as_string = null;
+        contentAsString = null;
 
         if (null != redactionEvent) {
             if (null == unsigned) {
@@ -1112,7 +1186,7 @@ public class Event implements Externalizable {
                 try {
                     unsigned.redacted_because.content.reason = contentAsJson.get("reason").getAsString();
                 } catch (Exception e) {
-                    Log.e(LOG_TAG, "unsigned.redacted_because.content.reason failed " + e.getMessage());
+                    Log.e(LOG_TAG, "unsigned.redacted_because.content.reason failed " + e.getMessage(), e);
                 }
 
             }
@@ -1166,7 +1240,7 @@ public class Event implements Externalizable {
      *
      * @param decryptionResult the decryption result, including the plaintext and some key info.
      */
-    public void setClearData(MXEventDecryptionResult decryptionResult) {
+    public void setClearData(@Nullable MXEventDecryptionResult decryptionResult) {
         mClearEvent = null;
 
         if (null != decryptionResult) {
@@ -1182,6 +1256,16 @@ public class Event implements Externalizable {
                     mClearEvent.mForwardingCurve25519KeyChain = decryptionResult.mForwardingCurve25519KeyChain;
                 } else {
                     mClearEvent.mForwardingCurve25519KeyChain = new ArrayList<>();
+                }
+
+                try {
+                    // Add "m.relates_to" data from e2e event to the unencrypted event
+                    if (getWireContent().getAsJsonObject().has("m.relates_to")) {
+                        mClearEvent.getContentAsJsonObject()
+                                .add("m.relates_to", getWireContent().getAsJsonObject().get("m.relates_to"));
+                    }
+                } catch (Exception e) {
+                    Log.e(LOG_TAG, "Unable to restore 'm.relates_to' the clear event", e);
                 }
             }
 

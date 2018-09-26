@@ -1,7 +1,8 @@
 /* 
  * Copyright 2014 OpenMarket Ltd
  * Copyright 2017 Vector Creations Ltd
- * 
+ * Copyright 2018 New Vector Ltd
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -45,7 +46,7 @@ public class MyUser extends User {
 
     // the account info is refreshed in one row
     // so, if there is a pending refresh the listeners are added to this list.
-    private transient ArrayList<ApiCallback<Void>> mRefreshListeners;
+    private transient List<ApiCallback<Void>> mRefreshListeners;
 
     private transient final Handler mUiHandler;
 
@@ -66,14 +67,15 @@ public class MyUser extends User {
      * @param displayName the new name
      * @param callback    the async callback
      */
-    public void updateDisplayName(final String displayName, ApiCallback<Void> callback) {
+    public void updateDisplayName(final String displayName, final ApiCallback<Void> callback) {
         mDataHandler.getProfileRestClient().updateDisplayname(displayName, new SimpleApiCallback<Void>(callback) {
             @Override
             public void onSuccess(Void info) {
                 // Update the object member before calling the given callback
                 MyUser.this.displayname = displayName;
-                MyUser.this.mDataHandler.getStore().setDisplayName(displayName, System.currentTimeMillis());
-                super.onSuccess(info);
+                mDataHandler.getStore().setDisplayName(displayName, System.currentTimeMillis());
+
+                callback.onSuccess(info);
             }
         });
     }
@@ -84,14 +86,15 @@ public class MyUser extends User {
      * @param avatarUrl the new avatar URL
      * @param callback  the async callback
      */
-    public void updateAvatarUrl(final String avatarUrl, ApiCallback<Void> callback) {
+    public void updateAvatarUrl(final String avatarUrl, final ApiCallback<Void> callback) {
         mDataHandler.getProfileRestClient().updateAvatarUrl(avatarUrl, new SimpleApiCallback<Void>(callback) {
             @Override
             public void onSuccess(Void info) {
                 // Update the object member before calling the given callback
-                MyUser.this.setAvatarUrl(avatarUrl);
-                MyUser.this.mDataHandler.getStore().setAvatarURL(avatarUrl, System.currentTimeMillis());
-                super.onSuccess(info);
+                setAvatarUrl(avatarUrl);
+                mDataHandler.getStore().setAvatarURL(avatarUrl, System.currentTimeMillis());
+
+                callback.onSuccess(info);
             }
         });
     }
@@ -129,32 +132,11 @@ public class MyUser extends User {
      */
     public void add3Pid(final ThreePid pid, final boolean bind, final ApiCallback<Void> callback) {
         if (null != pid) {
-            mDataHandler.getProfileRestClient().add3PID(pid, bind, new ApiCallback<Void>() {
+            mDataHandler.getProfileRestClient().add3PID(pid, bind, new SimpleApiCallback<Void>(callback) {
                 @Override
                 public void onSuccess(Void info) {
                     // refresh the third party identifiers lists
                     refreshThirdPartyIdentifiers(callback);
-                }
-
-                @Override
-                public void onNetworkError(Exception e) {
-                    if (null != callback) {
-                        callback.onNetworkError(e);
-                    }
-                }
-
-                @Override
-                public void onMatrixError(MatrixError e) {
-                    if (null != callback) {
-                        callback.onMatrixError(e);
-                    }
-                }
-
-                @Override
-                public void onUnexpectedError(Exception e) {
-                    if (null != callback) {
-                        callback.onUnexpectedError(e);
-                    }
                 }
             });
         }
@@ -168,32 +150,11 @@ public class MyUser extends User {
      */
     public void delete3Pid(final ThirdPartyIdentifier pid, final ApiCallback<Void> callback) {
         if (null != pid) {
-            mDataHandler.getProfileRestClient().delete3PID(pid, new ApiCallback<Void>() {
+            mDataHandler.getProfileRestClient().delete3PID(pid, new SimpleApiCallback<Void>(callback) {
                 @Override
                 public void onSuccess(Void info) {
                     // refresh the third party identifiers lists
                     refreshThirdPartyIdentifiers(callback);
-                }
-
-                @Override
-                public void onNetworkError(Exception e) {
-                    if (null != callback) {
-                        callback.onNetworkError(e);
-                    }
-                }
-
-                @Override
-                public void onMatrixError(MatrixError e) {
-                    if (null != callback) {
-                        callback.onMatrixError(e);
-                    }
-                }
-
-                @Override
-                public void onUnexpectedError(Exception e) {
-                    if (null != callback) {
-                        callback.onUnexpectedError(e);
-                    }
                 }
             });
         }
@@ -315,7 +276,7 @@ public class MyUser extends User {
                     try {
                         listener.onSuccess(null);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "## refreshUserInfos() : listener.onSuccess failed " + e.getMessage());
+                        Log.e(LOG_TAG, "## refreshUserInfos() : listener.onSuccess failed " + e.getMessage(), e);
                     }
                 }
             }

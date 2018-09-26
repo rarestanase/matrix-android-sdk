@@ -29,7 +29,7 @@ import org.matrix.androidsdk.rest.model.MatrixError;
  * A stub implementation of {@link ApiCallback} which only chosen callbacks
  * can be implemented.
  */
-public class SimpleApiCallback<T> implements ApiCallback<T> {
+public abstract class SimpleApiCallback<T> implements ApiCallback<T> {
 
     private static final String LOG_TAG = "SimpleApiCallback";
 
@@ -79,18 +79,6 @@ public class SimpleApiCallback<T> implements ApiCallback<T> {
         this.failureCallback = failureCallback;
     }
 
-    @Override
-    public void onSuccess(T info) {
-        // If the delegate has an onSuccess implementation, use it
-        if (failureCallback instanceof ApiCallback) {
-            try {
-                ((ApiCallback) failureCallback).onSuccess(info);
-            } catch (Exception exception) {
-                Log.e(LOG_TAG, "## onSuccess() failed" + exception.getMessage());
-            }
-        }
-    }
-
     private void displayToast(final String message) {
         if (null != mActivity) {
             mActivity.runOnUiThread(new Runnable() {
@@ -115,7 +103,7 @@ public class SimpleApiCallback<T> implements ApiCallback<T> {
             try {
                 failureCallback.onNetworkError(e);
             } catch (Exception exception) {
-                Log.e(LOG_TAG, "## onNetworkError() failed" + exception.getMessage());
+                Log.e(LOG_TAG, "## onNetworkError() failed" + exception.getMessage(), exception);
             }
         } else {
             displayToast("Network Error");
@@ -128,7 +116,7 @@ public class SimpleApiCallback<T> implements ApiCallback<T> {
             try {
                 failureCallback.onMatrixError(e);
             } catch (Exception exception) {
-                Log.e(LOG_TAG, "## onMatrixError() failed" + exception.getMessage());
+                Log.e(LOG_TAG, "## onMatrixError() failed" + exception.getMessage(), exception);
             }
         } else {
             displayToast("Matrix Error : " + e.getLocalizedMessage());
@@ -141,7 +129,7 @@ public class SimpleApiCallback<T> implements ApiCallback<T> {
             try {
                 failureCallback.onUnexpectedError(e);
             } catch (Exception exception) {
-                Log.e(LOG_TAG, "## onUnexpectedError() failed" + exception.getMessage());
+                Log.e(LOG_TAG, "## onUnexpectedError() failed" + exception.getMessage(), exception);
             }
         } else {
             displayToast(e.getLocalizedMessage());

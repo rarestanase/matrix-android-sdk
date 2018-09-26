@@ -1,6 +1,7 @@
 /*
  * Copyright 2014 OpenMarket Ltd
  * Copyright 2017 Vector Creations Ltd
+ * Copyright 2018 New Vector Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,20 +20,22 @@ package org.matrix.androidsdk.data;
 
 import android.text.TextUtils;
 
-import org.matrix.androidsdk.data.store.IMXStore;
-import org.matrix.androidsdk.rest.callback.SimpleApiCallback;
-import org.matrix.androidsdk.util.Log;
-
 import com.google.gson.JsonObject;
 
 import org.matrix.androidsdk.MXDataHandler;
 import org.matrix.androidsdk.call.MXCallsManager;
+import org.matrix.androidsdk.data.store.IMXStore;
+import org.matrix.androidsdk.rest.callback.ApiCallback;
+import org.matrix.androidsdk.rest.callback.SimpleApiCallback;
 import org.matrix.androidsdk.rest.model.Event;
 import org.matrix.androidsdk.rest.model.PowerLevels;
+import org.matrix.androidsdk.rest.model.RoomCreateContent;
 import org.matrix.androidsdk.rest.model.RoomMember;
-import org.matrix.androidsdk.rest.model.pid.RoomThirdPartyInvite;
+import org.matrix.androidsdk.rest.model.RoomTombstoneContent;
 import org.matrix.androidsdk.rest.model.User;
+import org.matrix.androidsdk.rest.model.pid.RoomThirdPartyInvite;
 import org.matrix.androidsdk.util.JsonUtils;
+import org.matrix.androidsdk.util.Log;
 
 import java.io.Externalizable;
 import java.io.IOException;
@@ -109,12 +112,15 @@ public class RoomState implements Externalizable {
     // The topic of the room.
     public String topic;
 
+    // The tombstone content if the room has been killed
+    private RoomTombstoneContent mRoomTombstoneContent;
+
     // The avatar url of the room.
     public String url;
     public String avatar_url;
 
-    // the room creator (user id)
-    public String creator;
+    // the room create content
+    private RoomCreateContent mRoomCreateContent;
 
     // the join rule
     public String join_rule;
@@ -187,7 +193,7 @@ public class RoomState implements Externalizable {
     private transient Object mDataHandler = null;
 
     // member display cache
-    private transient HashMap<String, String> mMemberDisplayNameByUserId = new HashMap<>();
+    private transient Map<String, String> mMemberDisplayNameByUserId = new HashMap<>();
 
     // get the guest access
     // avoid the null case
@@ -247,7 +253,7 @@ public class RoomState implements Externalizable {
      * @return a copy of the room members list.
      */
     public Collection<RoomMember> getMembers() {
-        ArrayList<RoomMember> res;
+        List<RoomMember> res;
 
         synchronized (this) {
             // make a copy to avoid concurrency modifications
@@ -296,7 +302,7 @@ public class RoomState implements Externalizable {
      * @param types    the allowed event types.
      * @param callback the asynchronous callback.
      */
-    public void getStateEvents(IMXStore store, final Set<String> types, final SimpleApiCallback<List<Event>> callback) {
+    public void getStateEvents(IMXStore store, final Set<String> types, final ApiCallback<List<Event>> callback) {
         if (null != store) {
             final List<Event> stateEvents = new ArrayList<>();
 
@@ -342,7 +348,7 @@ public class RoomState implements Externalizable {
         RoomMember conferenceUserId = getMember(MXCallsManager.getConferenceUserId(roomId));
 
         if (null != conferenceUserId) {
-            ArrayList<RoomMember> membersList = new ArrayList<>(members);
+            List<RoomMember> membersList = new ArrayList<>(members);
             membersList.remove(conferenceUserId);
             members = membersList;
         }
@@ -584,11 +590,11 @@ public class RoomState implements Externalizable {
         copy.setPowerLevels((powerLevels == null) ? null : powerLevels.deepCopy());
         copy.aliases = (aliases == null) ? null : new ArrayList<>(aliases);
         copy.mAliasesByDomain = new HashMap<>(mAliasesByDomain);
-        copy.alias = this.alias;
+        copy.alias = alias;
         copy.name = name;
         copy.topic = topic;
         copy.url = url;
-        copy.creator = creator;
+        copy.mRoomCreateContent = mRoomCreateContent != null ? mRoomCreateContent.deepCopy() : null;
         copy.join_rule = join_rule;
         copy.guest_access = guest_access;
         copy.history_visibility = history_visibility;
@@ -603,7 +609,7 @@ public class RoomState implements Externalizable {
         copy.algorithm = algorithm;
         copy.mRoomAliases = new HashMap<>(mRoomAliases);
         copy.mStateEvents = new HashMap<>(mStateEvents);
-
+        copy.mRoomTombstoneContent = mRoomTombstoneContent != null ? mRoomTombstoneContent.deepCopy() : null;
         synchronized (this) {
             Iterator it = mMembers.entrySet().iterator();
             while (it.hasNext()) {
@@ -817,8 +823,38 @@ public class RoomState implements Externalizable {
      */
     public boolean isEncrypted() {
         // When a client receives an m.room.encryption event as above, it should set a flag to indicate that messages sent in the room should be encrypted.
-        // This flag should not be cleared if a later m.room.encryption event changes the configuration. This is to avoid a situation where a MITM can simply ask participants to disable encryption. In short: once encryption is enabled in a room, it can never be disabled.
+        // This flag should not be cleared if a later m.room.encryption event changes the configuration. This is to avoid a situation where a MITM can simply
+        // ask participants to disable encryption. In short: once encryption is enabled in a room, it can never be disabled.
         return null != algorithm;
+    }
+
+    /**
+     * @return true if the room is versioned, it means that the room is obsolete.
+     * You can't interact with it anymore, but you can still browse the past messages.
+     */
+    public boolean isVersioned() {
+        return mRoomTombstoneContent != null;
+    }
+
+    /**
+     * @return the room tombstone content
+     */
+    public RoomTombstoneContent getRoomTombstoneContent() {
+        return mRoomTombstoneContent;
+    }
+
+    /**
+     * @return true if the room has a predecessor
+     */
+    public boolean hasPredecessor() {
+        return mRoomCreateContent != null && mRoomCreateContent.hasPredecessor();
+    }
+
+    /**
+     * @return the room create content
+     */
+    public RoomCreateContent getRoomCreateContent() {
+        return mRoomCreateContent;
     }
 
     /**
@@ -850,7 +886,7 @@ public class RoomState implements Externalizable {
             } else if (Event.EVENT_TYPE_STATE_ROOM_TOPIC.equals(eventType)) {
                 topic = JsonUtils.toRoomState(contentToConsider).topic;
             } else if (Event.EVENT_TYPE_STATE_ROOM_CREATE.equals(eventType)) {
-                creator = JsonUtils.toRoomState(contentToConsider).creator;
+                mRoomCreateContent = JsonUtils.toRoomCreateContent(contentToConsider);
             } else if (Event.EVENT_TYPE_STATE_ROOM_JOIN_RULES.equals(eventType)) {
                 join_rule = JsonUtils.toRoomState(contentToConsider).join_rule;
             } else if (Event.EVENT_TYPE_STATE_ROOM_GUEST_ACCESS.equals(eventType)) {
@@ -871,8 +907,11 @@ public class RoomState implements Externalizable {
             } else if (Event.EVENT_TYPE_MESSAGE_ENCRYPTION.equals(eventType)) {
                 algorithm = JsonUtils.toRoomState(contentToConsider).algorithm;
 
-                // When a client receives an m.room.encryption event as above, it should set a flag to indicate that messages sent in the room should be encrypted.
-                // This flag should not be cleared if a later m.room.encryption event changes the configuration. This is to avoid a situation where a MITM can simply ask participants to disable encryption. In short: once encryption is enabled in a room, it can never be disabled.
+                // When a client receives an m.room.encryption event as above, it should set a flag to indicate that messages sent
+                // in the room should be encrypted.
+                // This flag should not be cleared if a later m.room.encryption event changes the configuration. This is to avoid
+                // a situation where a MITM can simply ask participants to disable encryption. In short: once encryption is enabled
+                // in a room, it can never be disabled.
                 if (null == algorithm) {
                     algorithm = "";
                 }
@@ -921,7 +960,8 @@ public class RoomState implements Externalizable {
 
                         // when a member leaves a room, his avatar / display name is not anymore provided
                         if (null != currentMember) {
-                            if (TextUtils.equals(member.membership, RoomMember.MEMBERSHIP_LEAVE) || TextUtils.equals(member.membership, (RoomMember.MEMBERSHIP_BAN))) {
+                            if (TextUtils.equals(member.membership, RoomMember.MEMBERSHIP_LEAVE)
+                                    || TextUtils.equals(member.membership, (RoomMember.MEMBERSHIP_BAN))) {
                                 if (null == member.getAvatarUrl()) {
                                     member.setAvatarUrl(currentMember.getAvatarUrl());
                                 }
@@ -953,7 +993,7 @@ public class RoomState implements Externalizable {
                             mMembersWithThirdPartyInviteTokenCache.put(member.getThirdPartyInviteToken(), member);
                         }
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "## applyState() - EVENT_TYPE_STATE_ROOM_MEMBER failed " + e.getMessage());
+                        Log.e(LOG_TAG, "## applyState() - EVENT_TYPE_STATE_ROOM_MEMBER failed " + e.getMessage(), e);
                     }
 
                     setMember(userId, member);
@@ -974,8 +1014,9 @@ public class RoomState implements Externalizable {
                         mThirdPartyInvites.put(thirdPartyInvite.token, thirdPartyInvite);
                     }
                 }
+            } else if (Event.EVENT_TYPE_STATE_ROOM_TOMBSTONE.equals(eventType)) {
+                mRoomTombstoneContent = JsonUtils.toRoomTombstoneContent(contentToConsider);
             }
-
             // same the latest room state events
             // excepts the membership ones
             // they are saved elsewhere
@@ -991,7 +1032,7 @@ public class RoomState implements Externalizable {
             }
 
         } catch (Exception e) {
-            Log.e(LOG_TAG, "applyState failed with error " + e.getMessage());
+            Log.e(LOG_TAG, "applyState failed with error " + e.getMessage(), e);
         }
 
         return true;
@@ -1037,7 +1078,7 @@ public class RoomState implements Externalizable {
             displayName = member.displayname;
 
             synchronized (this) {
-                ArrayList<String> matrixIds = new ArrayList<>();
+                List<String> matrixIds = new ArrayList<>();
 
                 // Disambiguate users who have the same display name in the room
                 for (RoomMember aMember : mMembers.values()) {
@@ -1121,7 +1162,7 @@ public class RoomState implements Externalizable {
         }
 
         if (input.readBoolean()) {
-            creator = input.readUTF();
+            mRoomCreateContent = (RoomCreateContent) input.readObject();
         }
 
         if (input.readBoolean()) {
@@ -1181,8 +1222,13 @@ public class RoomState implements Externalizable {
         }
 
         if (input.readBoolean()) {
-            groups = (List<String>)input.readObject();
+            groups = (List<String>) input.readObject();
         }
+
+        if (input.readBoolean()) {
+            mRoomTombstoneContent = (RoomTombstoneContent) input.readObject();
+        }
+
     }
 
     @Override
@@ -1238,9 +1284,9 @@ public class RoomState implements Externalizable {
             output.writeUTF(avatar_url);
         }
 
-        output.writeBoolean(null != creator);
-        if (null != creator) {
-            output.writeUTF(creator);
+        output.writeBoolean(null != mRoomCreateContent);
+        if (null != mRoomCreateContent) {
+            output.writeObject(mRoomCreateContent);
         }
 
         output.writeBoolean(null != join_rule);
@@ -1300,6 +1346,11 @@ public class RoomState implements Externalizable {
         output.writeBoolean(null != groups);
         if (null != groups) {
             output.writeObject(groups);
+        }
+
+        output.writeBoolean(null != mRoomTombstoneContent);
+        if (null != mRoomTombstoneContent) {
+            output.writeObject(mRoomTombstoneContent);
         }
     }
 }

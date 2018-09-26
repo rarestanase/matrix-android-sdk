@@ -1,7 +1,8 @@
 /*
  * Copyright 2015 OpenMarket Ltd
  * Copyright 2017 Vector Creations Ltd
- * 
+ * Copyright 2018 New Vector Ltd
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -51,6 +52,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -79,7 +81,7 @@ public class MXCallsManager {
     private CallClass mPreferredCallClass = CallClass.WEBRTC_CLASS;
 
     // active calls
-    private final HashMap<String, IMXCall> mCallsByCallId = new HashMap<>();
+    private final Map<String, IMXCall> mCallsByCallId = new HashMap<>();
 
     // listeners
     private final Set<IMXCallsManagerListener> mListeners = new HashSet<>();
@@ -167,7 +169,7 @@ public class MXCallsManager {
      * @return the list of supported classes
      */
     public Collection<CallClass> supportedClass() {
-        ArrayList<CallClass> list = new ArrayList<>();
+        List<CallClass> list = new ArrayList<>();
 
         /*if (MXChromeCall.isSupported()) {
             list.add(CallClass.CHROME_CLASS);
@@ -224,7 +226,7 @@ public class MXCallsManager {
             try {
                 call = new MXWebRtcCall(mSession, mContext, getTurnServer());
             } catch (Exception e) {
-                Log.e(LOG_TAG, "createCall " + e.getMessage());
+                Log.e(LOG_TAG, "createCall " + e.getMessage(), e);
             }
         }
 
@@ -243,7 +245,7 @@ public class MXCallsManager {
      * @return the IMXCall if it exists
      */
     public IMXCall getCallWithRoomId(String roomId) {
-        ArrayList<IMXCall> calls;
+        List<IMXCall> calls;
 
         synchronized (this) {
             calls = new ArrayList<>(mCallsByCallId.values());
@@ -347,7 +349,7 @@ public class MXCallsManager {
      */
     public boolean hasActiveCalls() {
         synchronized (this) {
-            ArrayList<String> callIdsToRemove = new ArrayList<>();
+            List<String> callIdsToRemove = new ArrayList<>();
 
             Set<String> callIds = mCallsByCallId.keySet();
 
@@ -397,7 +399,7 @@ public class MXCallsManager {
                         eventContent = event.getContentAsJsonObject();
                         callId = eventContent.getAsJsonPrimitive("call_id").getAsString();
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "handleCallEvent : fail to retrieve call_id " + e.getMessage());
+                        Log.e(LOG_TAG, "handleCallEvent : fail to retrieve call_id " + e.getMessage(), e);
                     }
                     // sanity check
                     if ((null != callId) && (null != room)) {
@@ -553,7 +555,8 @@ public class MXCallsManager {
 
                                                             @Override
                                                             public void onNetworkError(Exception e) {
-                                                                Log.e(LOG_TAG, "## checkPendingIncomingCalls() : checkUnknownDevices failed " + e.getMessage());
+                                                                Log.e(LOG_TAG, "## checkPendingIncomingCalls() : checkUnknownDevices failed "
+                                                                        + e.getMessage(), e);
                                                                 dispatchOnIncomingCall(call, null);
                                                             }
 
@@ -570,9 +573,11 @@ public class MXCallsManager {
                                                                 }
 
                                                                 if (null != unknownDevices) {
-                                                                    Log.d(LOG_TAG, "## checkPendingIncomingCalls() : checkUnknownDevices found some unknown devices");
+                                                                    Log.d(LOG_TAG, "## checkPendingIncomingCalls() :" +
+                                                                            " checkUnknownDevices found some unknown devices");
                                                                 } else {
-                                                                    Log.e(LOG_TAG, "## checkPendingIncomingCalls() : checkUnknownDevices failed " + e.getMessage());
+                                                                    Log.e(LOG_TAG, "## checkPendingIncomingCalls() :" +
+                                                                            " checkUnknownDevices failed " + e.getMessage());
                                                                 }
 
                                                                 dispatchOnIncomingCall(call, unknownDevices);
@@ -580,7 +585,8 @@ public class MXCallsManager {
 
                                                             @Override
                                                             public void onUnexpectedError(Exception e) {
-                                                                Log.e(LOG_TAG, "## checkPendingIncomingCalls() : checkUnknownDevices failed " + e.getMessage());
+                                                                Log.e(LOG_TAG, "## checkPendingIncomingCalls() :" +
+                                                                        " checkUnknownDevices failed " + e.getMessage(), e);
                                                                 dispatchOnIncomingCall(call, null);
                                                             }
                                                         });
@@ -636,7 +642,7 @@ public class MXCallsManager {
                             String userId2 = members.get(1).getUserId();
 
                             // force the refresh to ensure that the devices list is up-to-date
-                            mSession.getCrypto().checkUnknownDevices(Arrays.asList(userId1, userId2), new ApiCallback<Void>() {
+                            mSession.getCrypto().checkUnknownDevices(Arrays.asList(userId1, userId2), new SimpleApiCallback<Void>(callback) {
                                 @Override
                                 public void onSuccess(Void anything) {
                                     final IMXCall call = getCallWithCallId(null, true);
@@ -651,27 +657,6 @@ public class MXCallsManager {
                                                 callback.onSuccess(call);
                                             }
                                         });
-                                    }
-                                }
-
-                                @Override
-                                public void onNetworkError(Exception e) {
-                                    if (null != callback) {
-                                        callback.onNetworkError(e);
-                                    }
-                                }
-
-                                @Override
-                                public void onMatrixError(MatrixError e) {
-                                    if (null != callback) {
-                                        callback.onMatrixError(e);
-                                    }
-                                }
-
-                                @Override
-                                public void onUnexpectedError(Exception e) {
-                                    if (null != callback) {
-                                        callback.onUnexpectedError(e);
                                     }
                                 }
                             });
@@ -722,7 +707,7 @@ public class MXCallsManager {
 
                                     @Override
                                     public void onNetworkError(Exception e) {
-                                        Log.d(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getMessage());
+                                        Log.e(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getMessage(), e);
 
                                         if (null != callback) {
                                             callback.onNetworkError(e);
@@ -731,7 +716,7 @@ public class MXCallsManager {
 
                                     @Override
                                     public void onMatrixError(MatrixError e) {
-                                        Log.d(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getMessage());
+                                        Log.e(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getMessage());
 
 
                                         if (null != callback) {
@@ -741,7 +726,7 @@ public class MXCallsManager {
 
                                     @Override
                                     public void onUnexpectedError(Exception e) {
-                                        Log.d(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getMessage());
+                                        Log.e(LOG_TAG, "createCallInRoom : getConferenceUserRoom failed " + e.getMessage(), e);
 
                                         if (null != callback) {
                                             callback.onUnexpectedError(e);
@@ -752,7 +737,7 @@ public class MXCallsManager {
 
                             @Override
                             public void onNetworkError(Exception e) {
-                                Log.d(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getMessage());
+                                Log.e(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getMessage(), e);
 
                                 if (null != callback) {
                                     callback.onNetworkError(e);
@@ -761,7 +746,7 @@ public class MXCallsManager {
 
                             @Override
                             public void onMatrixError(MatrixError e) {
-                                Log.d(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getMessage());
+                                Log.e(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getMessage());
 
                                 if (null != callback) {
                                     callback.onMatrixError(e);
@@ -770,7 +755,7 @@ public class MXCallsManager {
 
                             @Override
                             public void onUnexpectedError(Exception e) {
-                                Log.d(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getMessage());
+                                Log.e(LOG_TAG, "createCallInRoom : inviteConferenceUser fails " + e.getMessage(), e);
 
                                 if (null != callback) {
                                     callback.onUnexpectedError(e);
@@ -888,7 +873,7 @@ public class MXCallsManager {
                                     }
                                 }, msDelay);
                             } catch (Throwable e) {
-                                Log.e(LOG_TAG, "## refreshTurnServer() failed to start the timer");
+                                Log.e(LOG_TAG, "## refreshTurnServer() failed to start the timer", e);
 
                                 if (null != mTurnServerTimer) {
                                     mTurnServerTimer.cancel();
@@ -920,7 +905,7 @@ public class MXCallsManager {
                                     // restart a 90 % before ttl expires
                                     ttl = ttl * 9 / 10;
                                 } catch (Exception e) {
-                                    Log.e(LOG_TAG, "Fail to retrieve ttl " + e.getMessage());
+                                    Log.e(LOG_TAG, "Fail to retrieve ttl " + e.getMessage(), e);
                                 }
 
                                 Log.d(LOG_TAG, "## refreshTurnServer () : onSuccess : retry after " + ttl + " seconds");
@@ -931,7 +916,7 @@ public class MXCallsManager {
 
                     @Override
                     public void onNetworkError(Exception e) {
-                        Log.e(LOG_TAG, "## refreshTurnServer () : onNetworkError " + e);
+                        Log.e(LOG_TAG, "## refreshTurnServer () : onNetworkError", e);
                         restartAfter(60000);
                     }
 
@@ -948,6 +933,7 @@ public class MXCallsManager {
                     @Override
                     public void onUnexpectedError(Exception e) {
                         // should never happen
+                        Log.e(LOG_TAG, "## refreshTurnServer () : onUnexpectedError()", e);
                     }
                 });
             }
@@ -966,7 +952,7 @@ public class MXCallsManager {
     // at docs/conferencing.md for more info.
     private static final String USER_PREFIX = "fs_";
     private static final String DOMAIN = "matrix.org";
-    private static final HashMap<String, String> mConferenceUserIdByRoomId = new HashMap<>();
+    private static final Map<String, String> mConferenceUserIdByRoomId = new HashMap<>();
 
     /**
      * Return the id of the conference user dedicated for a room Id
@@ -989,7 +975,7 @@ public class MXCallsManager {
             try {
                 data = roomId.getBytes("UTF-8");
             } catch (Exception e) {
-                Log.e(LOG_TAG, "conferenceUserIdForRoom failed " + e.getMessage());
+                Log.e(LOG_TAG, "conferenceUserIdForRoom failed " + e.getMessage(), e);
             }
 
             if (null == data) {
@@ -1027,7 +1013,7 @@ public class MXCallsManager {
             try {
                 res = MXSession.isRoomId((new String(Base64.decode(roomIdBase64, Base64.NO_WRAP | Base64.URL_SAFE), "UTF-8")));
             } catch (Exception e) {
-                Log.e(LOG_TAG, "isConferenceUserId : failed " + e.getMessage());
+                Log.e(LOG_TAG, "isConferenceUserId : failed " + e.getMessage(), e);
             }
         }
 
@@ -1116,19 +1102,19 @@ public class MXCallsManager {
 
                 @Override
                 public void onNetworkError(Exception e) {
-                    Log.d(LOG_TAG, "getConferenceUserRoom : failed " + e.getMessage());
+                    Log.e(LOG_TAG, "getConferenceUserRoom : failed " + e.getMessage(), e);
                     callback.onNetworkError(e);
                 }
 
                 @Override
                 public void onMatrixError(MatrixError e) {
-                    Log.d(LOG_TAG, "getConferenceUserRoom : failed " + e.getMessage());
+                    Log.e(LOG_TAG, "getConferenceUserRoom : failed " + e.getMessage());
                     callback.onMatrixError(e);
                 }
 
                 @Override
                 public void onUnexpectedError(Exception e) {
-                    Log.d(LOG_TAG, "getConferenceUserRoom : failed " + e.getMessage());
+                    Log.e(LOG_TAG, "getConferenceUserRoom : failed " + e.getMessage(), e);
                     callback.onUnexpectedError(e);
                 }
             });
@@ -1193,7 +1179,7 @@ public class MXCallsManager {
             try {
                 l.onIncomingCall(call, unknownDevices);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "dispatchOnIncomingCall " + e.getMessage());
+                Log.e(LOG_TAG, "dispatchOnIncomingCall " + e.getMessage(), e);
             }
         }
     }
@@ -1212,7 +1198,7 @@ public class MXCallsManager {
             try {
                 l.onOutgoingCall(call);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "dispatchOnOutgoingCall " + e.getMessage());
+                Log.e(LOG_TAG, "dispatchOnOutgoingCall " + e.getMessage(), e);
             }
         }
     }
@@ -1231,7 +1217,7 @@ public class MXCallsManager {
             try {
                 l.onCallHangUp(call);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "dispatchOnCallHangUp " + e.getMessage());
+                Log.e(LOG_TAG, "dispatchOnCallHangUp " + e.getMessage(), e);
             }
         }
     }
@@ -1250,7 +1236,7 @@ public class MXCallsManager {
             try {
                 l.onVoipConferenceStarted(roomId);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "dispatchOnVoipConferenceStarted " + e.getMessage());
+                Log.e(LOG_TAG, "dispatchOnVoipConferenceStarted " + e.getMessage(), e);
             }
         }
     }
@@ -1269,7 +1255,7 @@ public class MXCallsManager {
             try {
                 l.onVoipConferenceFinished(roomId);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "dispatchOnVoipConferenceFinished " + e.getMessage());
+                Log.e(LOG_TAG, "dispatchOnVoipConferenceFinished " + e.getMessage(), e);
             }
         }
     }

@@ -18,6 +18,7 @@
 
 package org.matrix.androidsdk.data;
 
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import com.google.gson.JsonElement;
@@ -25,9 +26,12 @@ import com.google.gson.JsonObject;
 
 import org.matrix.androidsdk.rest.model.Event;
 import org.matrix.androidsdk.rest.model.EventContent;
-import org.matrix.androidsdk.rest.model.message.Message;
 import org.matrix.androidsdk.rest.model.RoomMember;
+import org.matrix.androidsdk.rest.model.message.Message;
 import org.matrix.androidsdk.util.Log;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Stores summarised information about the room.
@@ -52,6 +56,8 @@ public class RoomSummary implements java.io.Serializable {
 
     // the read marker event id
     private String mReadMarkerEventId;
+
+    private Set<String> mRoomTags;
 
     // counters
     public int mUnreadEventsCount;
@@ -81,7 +87,10 @@ public class RoomSummary implements java.io.Serializable {
      * @param roomState   the room state - used to display the event
      * @param userId      our own user id - used to display the room name
      */
-    public RoomSummary(RoomSummary fromSummary, Event event, RoomState roomState, String userId) {
+    public RoomSummary(@Nullable RoomSummary fromSummary,
+                       Event event,
+                       RoomState roomState,
+                       String userId) {
         setMatrixId(userId);
 
         if (null != roomState) {
@@ -112,7 +121,7 @@ public class RoomSummary implements java.io.Serializable {
             setReadReceiptEventId(fromSummary.getReadReceiptEventId());
             setUnreadEventsCount(fromSummary.getUnreadEventsCount());
             setHighlightCount(fromSummary.getHighlightCount());
-            setNotificationCount(fromSummary.getHighlightCount());
+            setNotificationCount(fromSummary.getNotificationCount());
         }
     }
 
@@ -151,7 +160,7 @@ public class RoomSummary implements java.io.Serializable {
                     Log.e(LOG_TAG, "isSupportedEvent : Unsupported msg type " + msgType);
                 }
             } catch (Exception e) {
-                Log.e(LOG_TAG, "isSupportedEvent failed " + e.getMessage());
+                Log.e(LOG_TAG, "isSupportedEvent failed " + e.getMessage(), e);
             }
         } else if (TextUtils.equals(Event.EVENT_TYPE_MESSAGE_ENCRYPTED, type)) {
             isSupported = event.hasContentFields();
@@ -490,5 +499,26 @@ public class RoomSummary implements java.io.Serializable {
      */
     public int getHighlightCount() {
         return mHighlightsCount;
+    }
+
+    /**
+     * @return the room tags
+     */
+    public Set<String> getRoomTags() {
+        return mRoomTags;
+    }
+
+    /**
+     * Update the room tags
+     *
+     * @param roomTags the room tags
+     */
+    public void setRoomTags(final Set<String> roomTags) {
+        if (roomTags != null) {
+            // wraps the set into a serializable one
+            mRoomTags = new HashSet<>(roomTags);
+        } else {
+            mRoomTags = new HashSet<>();
+        }
     }
 }

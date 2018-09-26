@@ -1,6 +1,7 @@
 /*
  * Copyright 2014 OpenMarket Ltd
  * Copyright 2017 Vector Creations Ltd
+ * Copyright 2018 New Vector Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,19 +24,19 @@ import org.matrix.androidsdk.data.RoomState;
 import org.matrix.androidsdk.rest.model.BannedUser;
 import org.matrix.androidsdk.rest.model.CreateRoomParams;
 import org.matrix.androidsdk.rest.model.CreateRoomResponse;
+import org.matrix.androidsdk.rest.model.CreatedEvent;
 import org.matrix.androidsdk.rest.model.Event;
 import org.matrix.androidsdk.rest.model.EventContext;
-import org.matrix.androidsdk.rest.model.message.Message;
 import org.matrix.androidsdk.rest.model.PowerLevels;
 import org.matrix.androidsdk.rest.model.ReportContentParams;
 import org.matrix.androidsdk.rest.model.RoomAliasDescription;
 import org.matrix.androidsdk.rest.model.RoomMember;
-import org.matrix.androidsdk.rest.model.sync.RoomResponse;
 import org.matrix.androidsdk.rest.model.TokensChunkResponse;
 import org.matrix.androidsdk.rest.model.Typing;
 import org.matrix.androidsdk.rest.model.User;
+import org.matrix.androidsdk.rest.model.message.Message;
+import org.matrix.androidsdk.rest.model.sync.RoomResponse;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import retrofit2.Call;
@@ -53,7 +54,7 @@ import retrofit2.http.Query;
 public interface RoomsApi {
 
     /**
-     * Send an event about a room.
+     * Send an event to a room.
      *
      * @param txId      the transaction Id
      * @param roomId    the room id
@@ -61,7 +62,7 @@ public interface RoomsApi {
      * @param content   the event content
      */
     @PUT("rooms/{roomId}/send/{eventType}/{txId}")
-    Call<Event> send(@Path("txId") String txId, @Path("roomId") String roomId, @Path("eventType") String eventType, @Body JsonObject content);
+    Call<CreatedEvent> send(@Path("txId") String txId, @Path("roomId") String roomId, @Path("eventType") String eventType, @Body JsonObject content);
 
     /**
      * Send a message to the specified room.
@@ -71,7 +72,7 @@ public interface RoomsApi {
      * @param message the message
      */
     @PUT("rooms/{roomId}/send/m.room.message/{txId}")
-    Call<Event> sendMessage(@Path("txId") String txId, @Path("roomId") String roomId, @Body Message message);
+    Call<CreatedEvent> sendMessage(@Path("txId") String txId, @Path("roomId") String roomId, @Body Message message);
 
     /**
      * Set the room topic.
@@ -155,7 +156,10 @@ public interface RoomsApi {
      * @param params     the request parameters
      */
     @PUT("rooms/{roomId}/state/{state_event_type}/{stateKey}")
-    Call<Void> sendStateEvent(@Path("roomId") String roomId, @Path("state_event_type") String stateEventType, @Path("stateKey") String stateKey, @Body Map<String, Object> params);
+    Call<Void> sendStateEvent(@Path("roomId") String roomId,
+                              @Path("state_event_type") String stateEventType,
+                              @Path("stateKey") String stateKey,
+                              @Body Map<String, Object> params);
 
     /**
      * Looks up the contents of a state event in a room
@@ -192,7 +196,7 @@ public interface RoomsApi {
      * @param params the parameters
      */
     @POST("rooms/{roomId}/invite")
-    Call<Void> invite(@Path("roomId") String roomId, @Body HashMap<String, String> params);
+    Call<Void> invite(@Path("roomId") String roomId, @Body Map<String, String> params);
 
     /**
      * Join the given room.
@@ -210,7 +214,7 @@ public interface RoomsApi {
      * @param params        the extra join param
      */
     @POST("join/{roomAliasOrId}")
-    Call<RoomResponse> joinRoomByAliasOrId(@Path("roomAliasOrId") String roomAliasOrId, @Body HashMap<String, Object> params);
+    Call<RoomResponse> joinRoomByAliasOrId(@Path("roomAliasOrId") String roomAliasOrId, @Body Map<String, Object> params);
 
     /**
      * Leave the given room.
@@ -351,7 +355,7 @@ public interface RoomsApi {
      * @param params the put params.
      */
     @PUT("rooms/{roomId}/state/m.room.avatar")
-    Call<Void> setRoomAvatarUrl(@Path("roomId") String roomId, @Body HashMap<String, String> params);
+    Call<Void> setRoomAvatarUrl(@Path("roomId") String roomId, @Body Map<String, String> params);
 
     /**
      * Send a read receipt.
@@ -381,7 +385,7 @@ public interface RoomsApi {
      * @param content the event content
      */
     @PUT("user/{userId}/rooms/{roomId}/tags/{tag}")
-    Call<Void> addTag(@Path("userId") String userId, @Path("roomId") String roomId, @Path("tag") String tag, @Body HashMap<String, Object> content);
+    Call<Void> addTag(@Path("userId") String userId, @Path("roomId") String roomId, @Path("tag") String tag, @Body Map<String, Object> content);
 
     /**
      * Remove a tag to a room
@@ -402,7 +406,10 @@ public interface RoomsApi {
      * @param content the event content
      */
     @PUT("user/{userId}/rooms/{roomId}/account_data/{tag}")
-    Call<Void> updateAccountData(@Path("userId") String userId, @Path("roomId") String roomId, @Path("tag") String subPath, @Body HashMap<String, Object> content);
+    Call<Void> updateAccountData(@Path("userId") String userId,
+                                 @Path("roomId") String roomId,
+                                 @Path("tag") String subPath,
+                                 @Body Map<String, Object> content);
 
     /**
      * Get the room ID associated to the room alias.

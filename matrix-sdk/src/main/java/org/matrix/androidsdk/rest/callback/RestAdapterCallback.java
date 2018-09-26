@@ -73,7 +73,10 @@ public class RestAdapterCallback<T> implements Callback<T> {
      * @param apiCallback          the callback
      * @param requestRetryCallBack the retry callback
      */
-    public RestAdapterCallback(String description, UnsentEventsManager unsentEventsManager, ApiCallback apiCallback, RequestRetryCallBack requestRetryCallBack) {
+    public RestAdapterCallback(String description,
+                               UnsentEventsManager unsentEventsManager,
+                               ApiCallback apiCallback,
+                               RequestRetryCallBack requestRetryCallBack) {
         this(description, unsentEventsManager, false, apiCallback, requestRetryCallBack);
     }
 
@@ -86,16 +89,20 @@ public class RestAdapterCallback<T> implements Callback<T> {
      * @param apiCallback                the callback
      * @param requestRetryCallBack       the retry callback
      */
-    public RestAdapterCallback(String description, UnsentEventsManager unsentEventsManager, boolean ignoreEventTimeLifeOffline, ApiCallback apiCallback, RequestRetryCallBack requestRetryCallBack) {
+    public RestAdapterCallback(String description,
+                               UnsentEventsManager unsentEventsManager,
+                               boolean ignoreEventTimeLifeOffline,
+                               ApiCallback apiCallback,
+                               RequestRetryCallBack requestRetryCallBack) {
         if (null != description) {
             Log.d(LOG_TAG, "Trigger the event [" + description + "]");
         }
 
-        this.mEventDescription = description;
-        this.mIgnoreEventTimeLifeInOffline = ignoreEventTimeLifeOffline;
-        this.mApiCallback = apiCallback;
-        this.mRequestRetryCallBack = requestRetryCallBack;
-        this.mUnsentEventsManager = unsentEventsManager;
+        mEventDescription = description;
+        mIgnoreEventTimeLifeInOffline = ignoreEventTimeLifeOffline;
+        mApiCallback = apiCallback;
+        mRequestRetryCallBack = requestRetryCallBack;
+        mUnsentEventsManager = unsentEventsManager;
     }
 
     /**
@@ -115,7 +122,7 @@ public class RestAdapterCallback<T> implements Callback<T> {
 
                 mUnsentEventsManager.onEventSent(mApiCallback);
             } catch (Exception e) {
-                Log.d(LOG_TAG, "## onEventSent(): Exception " + e.getMessage());
+                Log.e(LOG_TAG, "## onEventSent(): Exception " + e.getMessage(), e);
             }
         }
     }
@@ -164,13 +171,13 @@ public class RestAdapterCallback<T> implements Callback<T> {
                 try {
                     mApiCallback.onSuccess(t);
                 } catch (Exception e) {
-                    Log.e(LOG_TAG, "## succeed() : onSuccess failed " + e.getMessage());
+                    Log.e(LOG_TAG, "## succeed() : onSuccess failed " + e.getMessage(), e);
                     mApiCallback.onUnexpectedError(e);
                 }
             }
         } catch (Exception e) {
             // privacy
-            Log.e(LOG_TAG, "## succeed(): Exception " + e.getMessage());
+            Log.e(LOG_TAG, "## succeed(): Exception " + e.getMessage(), e);
         }
     }
 
@@ -202,7 +209,8 @@ public class RestAdapterCallback<T> implements Callback<T> {
 
         if (retry && (null != mUnsentEventsManager)) {
             Log.d(LOG_TAG, "Add it to the UnsentEventsManager");
-            mUnsentEventsManager.onEventSendingFailed(mEventDescription, mIgnoreEventTimeLifeInOffline, response, exception, mApiCallback, mRequestRetryCallBack);
+            mUnsentEventsManager.onEventSendingFailed(mEventDescription, mIgnoreEventTimeLifeInOffline, response, exception, mApiCallback,
+                    mRequestRetryCallBack);
         } else {
             if (exception != null && exception instanceof IOException) {
                 try {
@@ -210,13 +218,13 @@ public class RestAdapterCallback<T> implements Callback<T> {
                         try {
                             mApiCallback.onNetworkError(exception);
                         } catch (Exception e) {
-                            Log.e(LOG_TAG, "## failure(): onNetworkError " + exception.getLocalizedMessage());
+                            Log.e(LOG_TAG, "## failure(): onNetworkError " + exception.getLocalizedMessage(), exception);
                         }
                     }
                 } catch (Exception e) {
                     // privacy
                     //Log.e(LOG_TAG, "Exception NetworkError " + e.getMessage() + " while managing " + error.getUrl());
-                    Log.e(LOG_TAG, "## failure():  NetworkError " + e.getMessage());
+                    Log.e(LOG_TAG, "## failure():  NetworkError " + e.getMessage(), e);
                 }
             } else {
                 // Try to convert this into a Matrix error
@@ -238,7 +246,8 @@ public class RestAdapterCallback<T> implements Callback<T> {
                 }
                 if (mxError != null) {
                     if (MatrixError.LIMIT_EXCEEDED.equals(mxError.errcode) && (null != mUnsentEventsManager)) {
-                        mUnsentEventsManager.onEventSendingFailed(mEventDescription, mIgnoreEventTimeLifeInOffline, response, exception, mApiCallback, mRequestRetryCallBack);
+                        mUnsentEventsManager.onEventSendingFailed(mEventDescription, mIgnoreEventTimeLifeInOffline, response, exception, mApiCallback,
+                                mRequestRetryCallBack);
                     } else if (MatrixError.isConfigurationErrorCode(mxError.errcode) && (null != mUnsentEventsManager)) {
                         mUnsentEventsManager.onConfigurationErrorCode(mxError.errcode, mEventDescription);
                     } else {
@@ -249,7 +258,7 @@ public class RestAdapterCallback<T> implements Callback<T> {
                         } catch (Exception e) {
                             // privacy
                             //Log.e(LOG_TAG, "Exception MatrixError " + e.getMessage() + " while managing " + error.getUrl());
-                            Log.e(LOG_TAG, "## failure():  MatrixError " + e.getMessage());
+                            Log.e(LOG_TAG, "## failure():  MatrixError " + e.getMessage(), e);
                         }
                     }
                 } else {
@@ -260,7 +269,7 @@ public class RestAdapterCallback<T> implements Callback<T> {
                     } catch (Exception e) {
                         // privacy
                         //Log.e(LOG_TAG, "Exception UnexpectedError " + e.getMessage() + " while managing " + error.getUrl());
-                        Log.e(LOG_TAG, "## failure():  UnexpectedError " + e.getMessage());
+                        Log.e(LOG_TAG, "## failure():  UnexpectedError " + e.getMessage(), e);
                     }
                 }
             }

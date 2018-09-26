@@ -8,8 +8,8 @@
     <string name="notice_room_invite_no_invitee">%s\'s uitnodiging</string>
     <string name="notice_room_invite">%1$s nodigde %2$s uit</string>
     <string name="notice_room_invite_you">%1$s heeft jou uitgenodigd</string>
-    <string name="notice_room_join">%1$s is toegetreden</string>
-    <string name="notice_room_leave">%1$s is weggegaan</string>
+    <string name="notice_room_join">%1$s is tot de ruimte toegetreden</string>
+    <string name="notice_room_leave">%1$s heeft de ruimte verlaten</string>
     <string name="notice_room_reject">%1$s heeft de uitnodiging niet geaccepteerd</string>
     <string name="notice_room_kick">%1$s verwijderde %2$s</string>
     <string name="notice_room_unban">%1$s heeft %2$s ontbannen</string>
@@ -72,5 +72,14 @@
     <!-- medium friendly name -->
     <string name="medium_email">E-mailadres</string>
     <string name="medium_phone_number">Telefoonnummer</string>
+
+<string name="summary_user_sent_sticker">%1$s heeft een sticker gestuurd.</string>
+
+    <string name="message_reply_to_prefix">Als antwoord op</string>
+
+    <string name="reply_to_an_image">verstuurde een plaatje.</string>
+    <string name="reply_to_a_video">verstuurde een video.</string>
+    <string name="reply_to_an_audio_file">verstuurde een audiobestand.</string>
+    <string name="reply_to_a_file">verstuurde een bestand.</string>
 
 </resources>

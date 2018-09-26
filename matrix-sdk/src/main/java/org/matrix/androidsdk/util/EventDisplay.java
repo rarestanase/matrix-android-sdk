@@ -18,6 +18,8 @@ package org.matrix.androidsdk.util;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.os.Build;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.Html;
 import android.text.Spannable;
@@ -38,9 +40,9 @@ import org.matrix.androidsdk.data.RoomState;
 import org.matrix.androidsdk.interfaces.HtmlToolbox;
 import org.matrix.androidsdk.rest.model.Event;
 import org.matrix.androidsdk.rest.model.EventContent;
-import org.matrix.androidsdk.rest.model.message.Message;
 import org.matrix.androidsdk.rest.model.RedactedBecause;
 import org.matrix.androidsdk.rest.model.RoomMember;
+import org.matrix.androidsdk.rest.model.message.Message;
 import org.matrix.androidsdk.rest.model.pid.RoomThirdPartyInvite;
 
 /**
@@ -138,7 +140,7 @@ public class EventDisplay {
                         String sdpValue = sdp.getAsString();
                         isVideo = sdpValue.contains("m=video");
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "getTextualDisplay : " + e.getMessage());
+                        Log.e(LOG_TAG, "getTextualDisplay : " + e.getMessage(), e);
                     }
 
                     if (isVideo) {
@@ -155,7 +157,8 @@ public class EventDisplay {
                 }
             } else if (Event.EVENT_TYPE_STATE_HISTORY_VISIBILITY.equals(eventType)) {
                 CharSequence subpart;
-                String historyVisibility = (null != jsonEventContent.get("history_visibility")) ? jsonEventContent.get("history_visibility").getAsString() : RoomState.HISTORY_VISIBILITY_SHARED;
+                String historyVisibility = (null != jsonEventContent.get("history_visibility")) ?
+                        jsonEventContent.get("history_visibility").getAsString() : RoomState.HISTORY_VISIBILITY_SHARED;
 
                 if (TextUtils.equals(historyVisibility, RoomState.HISTORY_VISIBILITY_SHARED)) {
                     subpart = mContext.getString(R.string.notice_room_visibility_shared);
@@ -174,59 +177,14 @@ public class EventDisplay {
                 // the read receipt should not be displayed
                 text = "Read Receipt";
             } else if (Event.EVENT_TYPE_MESSAGE.equals(eventType)) {
-                String msgtype = (null != jsonEventContent.get("msgtype")) ? jsonEventContent.get("msgtype").getAsString() : "";
-
+                final String msgtype = (null != jsonEventContent.get("msgtype")) ? jsonEventContent.get("msgtype").getAsString() : "";
                 // all m.room.message events should support the 'body' key fallback, so use it.
-                text = jsonEventContent.has("body") ? jsonEventContent.get("body").getAsString() : null;
 
+                text = jsonEventContent.has("body") ? jsonEventContent.get("body").getAsString() : null;
                 // check for html formatting
                 if (jsonEventContent.has("formatted_body") && jsonEventContent.has("format")) {
-                    String format = jsonEventContent.getAsJsonPrimitive("format").getAsString();
-                    if (Message.FORMAT_MATRIX_HTML.equals(format)) {
-                        String htmlBody = jsonEventContent.getAsJsonPrimitive("formatted_body").getAsString();
-
-                        if (mHtmlToolbox != null) {
-                            htmlBody = mHtmlToolbox.convert(htmlBody);
-                        }
-
-                        // Special treatment for "In reply to" message
-                        if (jsonEventContent.has("m.relates_to")) {
-                            JsonElement relatesTo = jsonEventContent.get("m.relates_to");
-                            if (relatesTo.isJsonObject()) {
-                                if (relatesTo.getAsJsonObject().has("m.in_reply_to")) {
-                                    // Note: <mx-reply> tag has been removed by HtmlToolbox.convert()
-
-                                    // Replace <blockquote><a href=\"__permalink__\">In reply to</a>
-                                    // By <blockquote><a href=\"#\">['In reply to' from resources]</a>
-                                    // To disable the link and to localize the "In reply to" string
-                                    if (htmlBody.startsWith(MESSAGE_IN_REPLY_TO_FIRST_PART)) {
-                                        int index = htmlBody.indexOf(MESSAGE_IN_REPLY_TO_LAST_PART);
-
-                                        if (index != -1) {
-                                            htmlBody = MESSAGE_IN_REPLY_TO_FIRST_PART
-                                                    + "<a href=\"#\">"
-                                                    + mContext.getString(R.string.message_reply_to_prefix)
-                                                    + htmlBody.substring(index);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // some markers are not supported so fallback on an ascii display until to find the right way to manage them
-                        // an issue has been created https://github.com/vector-im/vector-android/issues/38
-                        // BMA re-enable <ol> and <li> support (https://github.com/vector-im/riot-android/issues/2184)
-                        if (!TextUtils.isEmpty(htmlBody)) {
-                            // TODO This call may be quite long, we should cache its result
-                            if(mHtmlToolbox != null) {
-                                text = Html.fromHtml(htmlBody, mHtmlToolbox.getImageGetter(), mHtmlToolbox.getTagHandler(htmlBody));
-                            } else {
-                                text = Html.fromHtml(htmlBody);
-                            }
-                        }
-                    }
+                    text = getFormattedMessage(mContext, jsonEventContent, mHtmlToolbox);
                 }
-
                 // avoid empty image name
                 if (TextUtils.equals(msgtype, Message.MSGTYPE_IMAGE) && TextUtils.isEmpty(text)) {
                     text = mContext.getString(R.string.summary_user_sent_image, userDisplayName);
@@ -238,8 +196,10 @@ public class EventDisplay {
                     text = new SpannableStringBuilder(mContext.getString(R.string.summary_message, userDisplayName, text));
 
                     if (null != displayNameColor) {
-                        ((SpannableStringBuilder) text).setSpan(new ForegroundColorSpan(displayNameColor), 0, userDisplayName.length() + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-                        ((SpannableStringBuilder) text).setSpan(new StyleSpan(android.graphics.Typeface.BOLD), 0, userDisplayName.length() + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        ((SpannableStringBuilder) text).setSpan(new ForegroundColorSpan(displayNameColor),
+                                0, userDisplayName.length() + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                        ((SpannableStringBuilder) text).setSpan(new StyleSpan(Typeface.BOLD),
+                                0, userDisplayName.length() + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
                     }
                 }
             } else if (Event.EVENT_TYPE_STICKER.equals(eventType)) {
@@ -285,7 +245,7 @@ public class EventDisplay {
                     }
 
                     SpannableString spannableStr = new SpannableString(message);
-                    spannableStr.setSpan(new android.text.style.StyleSpan(Typeface.ITALIC), 0, message.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    spannableStr.setSpan(new StyleSpan(Typeface.ITALIC), 0, message.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
                     text = spannableStr;
                 }
             } else if (Event.EVENT_TYPE_STATE_ROOM_TOPIC.equals(eventType)) {
@@ -344,7 +304,7 @@ public class EventDisplay {
                 text = getMembershipNotice(mContext, mEvent, mRoomState);
             }
         } catch (Exception e) {
-            Log.e(LOG_TAG, "getTextualDisplay() " + e.getMessage());
+            Log.e(LOG_TAG, "getTextualDisplay() " + e.getMessage(), e);
         }
 
         return text;
@@ -378,7 +338,8 @@ public class EventDisplay {
 
             if (!TextUtils.isEmpty(redactedReason)) {
                 if (!TextUtils.isEmpty(redactedBy)) {
-                    redactedBy = context.getString(R.string.notice_event_redacted_by, redactedBy) + context.getString(R.string.notice_event_redacted_reason, redactedReason);
+                    redactedBy = context.getString(R.string.notice_event_redacted_by, redactedBy)
+                            + context.getString(R.string.notice_event_redacted_reason, redactedReason);
                 } else {
                     redactedBy = context.getString(R.string.notice_event_redacted_reason, redactedReason);
                 }
@@ -406,7 +367,8 @@ public class EventDisplay {
 
         if (!event.isRedacted()) {
             if (null != roomState) {
-                // Consider first the current display name defined in provided room state (Note: this room state is supposed to not take the new event into account)
+                // Consider first the current display name defined in provided room state
+                // (Note: this room state is supposed to not take the new event into account)
                 senderDisplayName = roomState.getMemberName(event.getSender());
             }
 
@@ -415,8 +377,9 @@ public class EventDisplay {
                 // detect if it is displayname update
                 // a display name update is detected when the previous state was join and there was a displayname
                 if (!TextUtils.isEmpty(eventContent.displayname) ||
-                        ((null != prevEventContent) && TextUtils.equals(RoomMember.MEMBERSHIP_JOIN, prevEventContent.membership) && !TextUtils.isEmpty(prevEventContent.displayname))
-                        ) {
+                        ((null != prevEventContent)
+                                && TextUtils.equals(RoomMember.MEMBERSHIP_JOIN, prevEventContent.membership)
+                                && !TextUtils.isEmpty(prevEventContent.displayname))) {
                     senderDisplayName = eventContent.displayname;
                 }
             }
@@ -585,4 +548,68 @@ public class EventDisplay {
         }
         return null;
     }
+
+
+    /**
+     * @param context          the context
+     * @param jsonEventContent the current jsonEventContent
+     * @param htmlToolbox      an optional htmlToolbox to manage html images and tag
+     * @return the formatted message as CharSequence
+     */
+    private CharSequence getFormattedMessage(@NonNull final Context context,
+                                             @NonNull final JsonObject jsonEventContent,
+                                             @Nullable final HtmlToolbox htmlToolbox) {
+        final String format = jsonEventContent.getAsJsonPrimitive("format").getAsString();
+        CharSequence text = null;
+        if (Message.FORMAT_MATRIX_HTML.equals(format)) {
+            String htmlBody = jsonEventContent.getAsJsonPrimitive("formatted_body").getAsString();
+            if (htmlToolbox != null) {
+                htmlBody = htmlToolbox.convert(htmlBody);
+            }
+            // Special treatment for "In reply to" message
+            if (jsonEventContent.has("m.relates_to")) {
+                final JsonElement relatesTo = jsonEventContent.get("m.relates_to");
+                if (relatesTo.isJsonObject()) {
+                    if (relatesTo.getAsJsonObject().has("m.in_reply_to")) {
+                        // Note: <mx-reply> tag has been removed by HtmlToolbox.convert()
+
+                        // Replace <blockquote><a href=\"__permalink__\">In reply to</a>
+                        // By <blockquote>['In reply to' from resources]
+                        // To disable the link and to localize the "In reply to" string
+                        if (htmlBody.startsWith(MESSAGE_IN_REPLY_TO_FIRST_PART)) {
+                            final int index = htmlBody.indexOf(MESSAGE_IN_REPLY_TO_LAST_PART);
+                            if (index != -1) {
+                                htmlBody = MESSAGE_IN_REPLY_TO_FIRST_PART
+                                        + context.getString(R.string.message_reply_to_prefix)
+                                        + htmlBody.substring(index + MESSAGE_IN_REPLY_TO_LAST_PART.length());
+                            }
+                        }
+                    }
+                }
+            }
+            // some markers are not supported so fallback on an ascii display until to find the right way to manage them
+            // an issue has been created https://github.com/vector-im/vector-android/issues/38
+            // BMA re-enable <ol> and <li> support (https://github.com/vector-im/riot-android/issues/2184)
+            if (!TextUtils.isEmpty(htmlBody)) {
+                final Html.ImageGetter imageGetter;
+                final Html.TagHandler tagHandler;
+                if (htmlToolbox != null) {
+                    imageGetter = htmlToolbox.getImageGetter();
+                    tagHandler = htmlToolbox.getTagHandler(htmlBody);
+                } else {
+                    imageGetter = null;
+                    tagHandler = null;
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    text = Html.fromHtml(htmlBody,
+                            Html.FROM_HTML_SEPARATOR_LINE_BREAK_LIST_ITEM | Html.FROM_HTML_SEPARATOR_LINE_BREAK_LIST,
+                            imageGetter, tagHandler);
+                } else {
+                    text = Html.fromHtml(htmlBody, imageGetter, tagHandler);
+                }
+            }
+        }
+        return text;
+    }
+
 }

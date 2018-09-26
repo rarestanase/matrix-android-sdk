@@ -1,3 +1,113 @@
+Changes to Matrix Android SDK in 0.9.9 (2018-08-30)
+=======================================================
+
+Improvements:
+ - Clear unreachable Url when clearing media cache (vector-im/riot-android#2479)
+ - "In reply to" is not clickable on Riot Android yet. Make it a plain text (vector-im/riot-android#2469)
+
+Bugfix:
+ - Removing room from 'low priority' or 'favorite' does not work (vector-im/riot-android#2526)
+ - MatrixError mResourceLimitExceededError is now managed in MxDataHandler (vector-im/riot-android#2547)
+
+API Change:
+ - MxSession constructor is now private. Please use MxSession.Builder() to create a MxSession
+
+Changes to Matrix Android SDK in 0.9.8 (2018-08-27)
+=======================================================
+
+Features:
+ - Manage server_notices tag and server quota notices (vector-im/riot-android#2440)
+
+Bugfix:
+ - Room aliases including the '@' and '=' characters are now recognized as valid (vector-im/riot-android#2079, vector-im/riot-android#2542)
+ - Room name and topic can be now set back to empty (vector-im/riot-android#2345)
+
+API Change:
+ - Remove PieFractionView class from the Matrix SDK. This class is now in Riot sources (#336)
+ - MXMediasCache.createTmpMediaFile() methods are renamed to createTmpDecryptedMediaFile()
+ - MXMediasCache.clearTmpCache() method is renamed to clearTmpDecryptedMediaCache()
+ - Add MXMediasCache.moveToShareFolder() to move a tmp decrypted file to another folder to prevent deletion during sharing. New API MXMediasCache.clearShareDecryptedMediaCache() can be called when the application is resumed. (vector-im/riot-android#2530)
+
+Changes to Matrix Android SDK in 0.9.7 (2018-08-09)
+=======================================================
+
+Features:
+ - Add MetricsListener to measure some startup and stats metrics
+ - Implements ReplyTo feature. When sending an event, you can now pass another Event to reply to it. (vector-im/riot-android#2390)
+ - Manage room versioning 
+
+Improvements:
+ - MXCrypto: Encrypt the messages for invited members according to the history visibility (if the option is enabled in MXCryptoConfig).
+ - Upgrade olm-sdk.aar from version 2.2.2 to version 2.3.0
+ - Add a method to MediaScanRestClient to get the public key of the media scanner server
+ - Add support for the scanning and downloading of unencrypted thumbnails
+ - Set user agent on manual HttpConnection (i.e. not using a RestClient)
+ - Bullet points look esthetically bad (#2462)
+
+Bugfix:
+ - Send Access Token as a header instead of a url parameter to upload content (#311)
+ - Add API CallSoundsManager.startRingingSilently() to fix issue when incoming call sound is disable (vector-im/riot-android#2417)
+ - Use same TxId when resending an event. The eventId is used as a TxId. (vector-im/riot-android#1997)
+ - Fix bad bing on '@room' pattern. (vector-im/riot-android#2461)
+ - Fix Crash loop reported by RageShake (vector-im/riot-android#2501)
+
+API Change:
+ - Parameter historyVisibility removed from MxSession.createRoom(). It had no effect.
+ - New API: CreateRoomParams.setHistoryVisibility(String historyVisibility) to force the history visibility during Room creation.
+ - Room.getLiveState() has been removed, please use Room.getState() (#310)
+ - new API: Room.canReplyTo(Event) to know if replying to this event is supported.
+ - New APIs PermalinkUtils.createPermalink() to create matrix permalink for an event, a room, a user, etc.
+ - New API: add hasMembership(String membership) to simplify test on room membership
+
+Others:
+ - Do not log DEBUG messages in release versions (PR #304)
+ - Rename some internal classes to change 'Bing' to 'Push'
+
+Changes to Matrix Android SDK in 0.9.6 (2018-07-03)
+=======================================================
+
+Features:
+ - ContentManager: support a potential anti-virus scanner (PR #283).
+ - HomeServerConnectionConfig: allow configuration of TLS parameters (PR#293).
+
+Improvements:
+ - MXCrypto: Add reRequestRoomKeyForEvent to re-request encryption keys to decrypt an event (vector-im/riot-android#2319).
+ - MXCrypto: Add MXCryptoConfig class to customize/configure the e2e encryption.
+
+Bugfix:
+ - Prevent crash on KitKat
+ - Prevent leaking of filenames in uploads to E2EE rooms
+ - Prefer message text instead of subject
+ - Fix issue with notification count in a RoomSummary
+ - Fix NullPointerException reported by GooglePlay (vector-im/riot-android#2382)
+ - Fix crash in CallSoundsManager
+
+API Change:
+ - New API: add device_id param to LoginRestClient.loginWithUser()
+ - API change: Event.isUnkownDevice() as been renamed to Event.isUnknownDevice() (typo)
+ - Some APIs has changed to use interface instead of implementation as type (ex: "Map" instead of "HashMap")
+
+Others:
+ - Media cache is flushed because of the new format of ids.
+
+Build:
+ - Add script to check code quality
+ - Travis will now check if CHANGES.rst has been modified for each PR
+
+Test:
+ - Crypto tests have been cleaned - All tests are passed
+
+
+Changes to Matrix Android SDK in 0.9.5 (2018-06-01)
+=======================================================
+
+Bugfix:
+ - Fix regression on URL preview, along with regression on searching user. (vector-im/riot-android#2264)
+ - Fix bad param format on reporting content request (vector-im/riot-android#2301)
+
+API Change:
+ - New API in MXSession to deactivate account
+
 Changes to Matrix Android SDK in 0.9.4 (2018-05-25)
 =======================================================
 
@@ -221,7 +331,7 @@ Improvements:
 
 * Improve the catchup synchronisation (reduce the number of stored events)
 * Refactor the state events storage format to reduce its size.
-* Improve the backward / fordward management to avoid having UI lags.
+* Improve the backward / forward management to avoid having UI lags.
 
 Bugfixes:
 
@@ -572,32 +682,7 @@ Bugfixes:
 * GA issue : EventTimeLine.mDataHandler is empty whereas it should be.
 * onInvalidToken should not be triggered when MatrixError.FORBIDDEN is received.
 * #186 : Start chat with a member should use the latest room instead of the first found one.
-* Fix a crash with JingleCall class (when teh libs are not found on the device).
-* The room object was not always initialized when MessagesAdapter is created (tap on a notication whereas the client is not launched).
-* Fix a crash when an incoming call is received and the dedicated permissions are not granted.
-
-Changes to Matrix Android SDK in 0.5.7 (2016-06-21)
-=======================================================
-
-Improvements:
-
-* The room visibility messages are displayed in the room history.
-* Do not refresh the turn servers if the HS does not support it.
-* RoomState : The events_default and users_default default values are now 0.
-
-Features:
-
-* Add some new room settings management (list in Directory, room access, room history)
-* The background sync timeout is now configurable.
-* A sleep can be defined between two sync requests.
-
-Bugfixes:
-
-* #206 : There is no space between some avatars (unexpected avatar).
-* GA issue : EventTimeLine.mDataHandler is empty whereas it should be.
-* onInvalidToken should not be triggered when MatrixError.FORBIDDEN is received.
-* #186 : Start chat with a member should use the latest room instead of the first found one.
-* Fix a crash with JingleCall class (when teh libs are not found on the device).
+* Fix a crash with JingleCall class (when the libs are not found on the device).
 * The room object was not always initialized when MessagesAdapter is created (tap on a notication whereas the client is not launched).
 * Fix a crash when an incoming call is received and the dedicated permissions are not granted.
 

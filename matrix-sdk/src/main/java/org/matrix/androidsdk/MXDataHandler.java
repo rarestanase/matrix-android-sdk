@@ -1,6 +1,7 @@
 /*
  * Copyright 2014 OpenMarket Ltd
  * Copyright 2017 Vector Creations Ltd
+ * Copyright 2018 New Vector Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +20,7 @@ package org.matrix.androidsdk;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import com.google.gson.Gson;
@@ -35,6 +37,7 @@ import org.matrix.androidsdk.data.MyUser;
 import org.matrix.androidsdk.data.Room;
 import org.matrix.androidsdk.data.RoomState;
 import org.matrix.androidsdk.data.RoomSummary;
+import org.matrix.androidsdk.data.metrics.MetricsListener;
 import org.matrix.androidsdk.data.store.IMXStore;
 import org.matrix.androidsdk.data.store.MXMemoryStore;
 import org.matrix.androidsdk.db.MXMediasCache;
@@ -55,15 +58,15 @@ import org.matrix.androidsdk.rest.model.MatrixError;
 import org.matrix.androidsdk.rest.model.ReceiptData;
 import org.matrix.androidsdk.rest.model.RoomAliasDescription;
 import org.matrix.androidsdk.rest.model.RoomMember;
-import org.matrix.androidsdk.rest.model.group.InvitedGroupSync;
-import org.matrix.androidsdk.rest.model.sync.InvitedRoomSync;
-import org.matrix.androidsdk.rest.model.sync.SyncResponse;
 import org.matrix.androidsdk.rest.model.User;
 import org.matrix.androidsdk.rest.model.bingrules.BingRule;
-import org.matrix.androidsdk.rest.model.bingrules.BingRuleSet;
-import org.matrix.androidsdk.rest.model.bingrules.BingRulesResponse;
 import org.matrix.androidsdk.rest.model.bingrules.Condition;
+import org.matrix.androidsdk.rest.model.bingrules.PushRuleSet;
+import org.matrix.androidsdk.rest.model.bingrules.PushRulesResponse;
+import org.matrix.androidsdk.rest.model.group.InvitedGroupSync;
 import org.matrix.androidsdk.rest.model.login.Credentials;
+import org.matrix.androidsdk.rest.model.sync.InvitedRoomSync;
+import org.matrix.androidsdk.rest.model.sync.SyncResponse;
 import org.matrix.androidsdk.ssl.UnrecognizedCertificateException;
 import org.matrix.androidsdk.util.BingRulesManager;
 import org.matrix.androidsdk.util.JsonUtils;
@@ -119,6 +122,8 @@ public class MXDataHandler implements IMXEventListener {
     private MXCallsManager mCallsManager;
     private MXMediasCache mMediasCache;
 
+    private MetricsListener mMetricsListener;
+
     private ProfileRestClient mProfileRestClient;
     private PresenceRestClient mPresenceRestClient;
     private ThirdPidRestClient mThirdPidRestClient;
@@ -151,7 +156,7 @@ public class MXDataHandler implements IMXEventListener {
     private boolean mAreLeftRoomsSynced;
 
     //
-    private final ArrayList<ApiCallback<Void>> mLeftRoomsRefreshCallbacks = new ArrayList<>();
+    private final List<ApiCallback<Void>> mLeftRoomsRefreshCallbacks = new ArrayList<>();
     private boolean mIsRetrievingLeftRooms;
 
     // the left rooms are saved in a dedicated store.
@@ -165,6 +170,10 @@ public class MXDataHandler implements IMXEventListener {
 
     // groups manager
     private GroupsManager mGroupsManager;
+
+    // Resource limit exceeded error
+    @Nullable
+    private MatrixError mResourceLimitExceededError;
 
     /**
      * Default constructor.
@@ -192,6 +201,15 @@ public class MXDataHandler implements IMXEventListener {
      */
     public void setRequestNetworkErrorListener(RequestNetworkErrorListener requestNetworkErrorListener) {
         mRequestNetworkErrorListener = requestNetworkErrorListener;
+    }
+
+    /**
+     * Update the metrics listener
+     *
+     * @param metricsListener the metrics listener
+     */
+    public void setMetricsListener(MetricsListener metricsListener) {
+        mMetricsListener = metricsListener;
     }
 
     /**
@@ -348,7 +366,7 @@ public class MXDataHandler implements IMXEventListener {
     private void checkIfAlive() {
         synchronized (this) {
             if (!mIsAlive) {
-                Log.e(LOG_TAG, "use of a released dataHandler");
+                Log.e(LOG_TAG, "use of a released dataHandler", new Exception("use of a released dataHandler"));
                 //throw new AssertionError("Should not used a MXDataHandler");
             }
         }
@@ -387,6 +405,16 @@ public class MXDataHandler implements IMXEventListener {
         if (null != mRequestNetworkErrorListener) {
             mRequestNetworkErrorListener.onSSLCertificateError(exception);
         }
+    }
+
+    /**
+     * Get the last resource limit exceeded error if any or null
+     *
+     * @return the last resource limit exceeded error if any or null
+     */
+    @Nullable
+    public MatrixError getResourceLimitExceededError() {
+        return mResourceLimitExceededError;
     }
 
     /**
@@ -474,7 +502,7 @@ public class MXDataHandler implements IMXEventListener {
             mBingRulesManager.loadRules(new SimpleApiCallback<Void>() {
                 @Override
                 public void onSuccess(Void info) {
-                    MXDataHandler.this.onBingRulesUpdate();
+                    onBingRulesUpdate();
                 }
             });
         }
@@ -521,7 +549,7 @@ public class MXDataHandler implements IMXEventListener {
     /**
      * @return the used push rules set.
      */
-    public BingRuleSet pushRules() {
+    public PushRuleSet pushRules() {
         if (isAlive() && (null != mBingRulesManager)) {
             return mBingRulesManager.pushRules();
         }
@@ -537,7 +565,7 @@ public class MXDataHandler implements IMXEventListener {
             mBingRulesManager.loadRules(new SimpleApiCallback<Void>() {
                 @Override
                 public void onSuccess(Void info) {
-                    MXDataHandler.this.onBingRulesUpdate();
+                    onBingRulesUpdate();
                 }
             });
         }
@@ -838,7 +866,7 @@ public class MXDataHandler implements IMXEventListener {
      * @return the room summaries
      */
     public Collection<RoomSummary> getSummaries(boolean withLeftOnes) {
-        ArrayList<RoomSummary> summaries = new ArrayList<>();
+        List<RoomSummary> summaries = new ArrayList<>();
 
         summaries.addAll(getStore().getSummaries());
 
@@ -894,25 +922,10 @@ public class MXDataHandler implements IMXEventListener {
                 }
             });
         } else {
-            mRoomsRestClient.getRoomIdByAlias(roomAlias, new ApiCallback<RoomAliasDescription>() {
+            mRoomsRestClient.getRoomIdByAlias(roomAlias, new SimpleApiCallback<RoomAliasDescription>(callback) {
                 @Override
                 public void onSuccess(RoomAliasDescription info) {
                     callback.onSuccess(info.room_id);
-                }
-
-                @Override
-                public void onNetworkError(Exception e) {
-                    callback.onNetworkError(e);
-                }
-
-                @Override
-                public void onMatrixError(MatrixError e) {
-                    callback.onMatrixError(e);
-                }
-
-                @Override
-                public void onUnexpectedError(Exception e) {
-                    callback.onUnexpectedError(e);
                 }
             });
         }
@@ -1005,7 +1018,7 @@ public class MXDataHandler implements IMXEventListener {
                 }
             }
         } catch (Exception e) {
-            Log.e(LOG_TAG, "manageAccountData failed " + e.getMessage());
+            Log.e(LOG_TAG, "manageAccountData failed " + e.getMessage(), e);
         }
     }
 
@@ -1026,10 +1039,10 @@ public class MXDataHandler implements IMXEventListener {
                             .registerTypeAdapter(Condition.class, new ConditionDeserializer())
                             .create();
 
-                    // convert the data to BingRulesResponse
-                    // because BingRulesManager supports only BingRulesResponse
+                    // convert the data to PushRulesResponse
+                    // because BingRulesManager supports only PushRulesResponse
                     JsonElement element = gson.toJsonTree(event.get("content"));
-                    getBingRulesManager().buildRules(gson.fromJson(element, BingRulesResponse.class));
+                    getBingRulesManager().buildRules(gson.fromJson(element, PushRulesResponse.class));
 
                     // warn the client that the push rules have been updated
                     onBingRulesUpdate();
@@ -1191,7 +1204,7 @@ public class MXDataHandler implements IMXEventListener {
     /**
      * Handle a presence event.
      *
-     * @param presenceEvent teh presence event.
+     * @param presenceEvent the presence event.
      */
     private void handlePresenceEvent(Event presenceEvent) {
         // Presence event
@@ -1227,7 +1240,7 @@ public class MXDataHandler implements IMXEventListener {
             }
 
             mStore.storeUser(user);
-            this.onPresenceUpdate(presenceEvent, user);
+            onPresenceUpdate(presenceEvent, user);
         }
     }
 
@@ -1257,7 +1270,7 @@ public class MXDataHandler implements IMXEventListener {
      */
     public void deleteRoom(String roomId) {
         // copy the room from a store to another one
-        Room r = this.getStore().getRoom(roomId);
+        Room r = getStore().getRoom(roomId);
 
         if (null != r) {
             if (mAreLeftRoomsSynced) {
@@ -1273,7 +1286,7 @@ public class MXDataHandler implements IMXEventListener {
                 // copy events and receiptData
                 // it is not required but it is better, it could be useful later
                 // the room summary should be enough to be displayed in the recent pages
-                ArrayList<ReceiptData> receipts = new ArrayList<>();
+                List<ReceiptData> receipts = new ArrayList<>();
                 Collection<Event> events = getStore().getRoomMessages(roomId);
 
                 if (null != events) {
@@ -1338,11 +1351,13 @@ public class MXDataHandler implements IMXEventListener {
             // sanity check
             if (null != syncResponse.rooms) {
                 // joined rooms events
+
                 if ((null != syncResponse.rooms.join) && (syncResponse.rooms.join.size() > 0)) {
                     Log.d(LOG_TAG, "Received " + syncResponse.rooms.join.size() + " joined rooms");
-
+                    if (mMetricsListener != null) {
+                        mMetricsListener.onRoomsLoaded(syncResponse.rooms.join.size());
+                    }
                     Set<String> roomIds = syncResponse.rooms.join.keySet();
-
                     // Handle first joined rooms
                     for (String roomId : roomIds) {
                         try {
@@ -1353,7 +1368,7 @@ public class MXDataHandler implements IMXEventListener {
 
                             getRoom(roomId).handleJoinedRoomSync(syncResponse.rooms.join.get(roomId), isInitialSync);
                         } catch (Exception e) {
-                            Log.e(LOG_TAG, "## manageResponse() : handleJoinedRoomSync failed " + e.getMessage() + " for room " + roomId);
+                            Log.e(LOG_TAG, "## manageResponse() : handleJoinedRoomSync failed " + e.getMessage() + " for room " + roomId, e);
                         }
                     }
 
@@ -1366,7 +1381,7 @@ public class MXDataHandler implements IMXEventListener {
 
                     Set<String> roomIds = syncResponse.rooms.invite.keySet();
 
-                    HashMap<String, List<String>> updatedDirectChatRoomsDict = null;
+                    Map<String, List<String>> updatedDirectChatRoomsDict = null;
                     boolean hasChanged = false;
 
                     for (String roomId : roomIds) {
@@ -1397,15 +1412,15 @@ public class MXDataHandler implements IMXEventListener {
                                 if (null != participantUserId) {
                                     // Prepare the updated dictionary.
                                     if (null == updatedDirectChatRoomsDict) {
-                                        if (null != this.getStore().getDirectChatRoomsDict()) {
+                                        if (null != getStore().getDirectChatRoomsDict()) {
                                             // Consider the current dictionary.
-                                            updatedDirectChatRoomsDict = new HashMap<>(this.getStore().getDirectChatRoomsDict());
+                                            updatedDirectChatRoomsDict = new HashMap<>(getStore().getDirectChatRoomsDict());
                                         } else {
                                             updatedDirectChatRoomsDict = new HashMap<>();
                                         }
                                     }
 
-                                    ArrayList<String> roomIdsList;
+                                    List<String> roomIdsList;
                                     if (updatedDirectChatRoomsDict.containsKey(participantUserId)) {
                                         roomIdsList = new ArrayList<>(updatedDirectChatRoomsDict.get(participantUserId));
                                     } else {
@@ -1423,35 +1438,37 @@ public class MXDataHandler implements IMXEventListener {
                                 }
                             }
                         } catch (Exception e) {
-                            Log.e(LOG_TAG, "## manageResponse() : handleInvitedRoomSync failed " + e.getMessage() + " for room " + roomId);
+                            Log.e(LOG_TAG, "## manageResponse() : handleInvitedRoomSync failed " + e.getMessage() + " for room " + roomId, e);
                         }
                     }
 
                     isEmptyResponse = false;
 
                     if (hasChanged) {
-                        mAccountDataRestClient.setAccountData(mCredentials.userId, AccountDataRestClient.ACCOUNT_DATA_TYPE_DIRECT_MESSAGES, updatedDirectChatRoomsDict, new ApiCallback<Void>() {
-                            @Override
-                            public void onSuccess(Void info) {
-                                Log.d(LOG_TAG, "## manageResponse() : succeeds");
-                            }
+                        // Update account data to add new direct chat room(s)
+                        mAccountDataRestClient.setAccountData(mCredentials.userId, AccountDataRestClient.ACCOUNT_DATA_TYPE_DIRECT_MESSAGES,
+                                updatedDirectChatRoomsDict, new ApiCallback<Void>() {
+                                    @Override
+                                    public void onSuccess(Void info) {
+                                        Log.d(LOG_TAG, "## manageResponse() : succeeds");
+                                    }
 
-                            @Override
-                            public void onNetworkError(Exception e) {
-                                Log.e(LOG_TAG, "## manageResponse() : update account data failed " + e.getMessage());
-                                // TODO: we should try again.
-                            }
+                                    @Override
+                                    public void onNetworkError(Exception e) {
+                                        Log.e(LOG_TAG, "## manageResponse() : update account data failed " + e.getMessage(), e);
+                                        // TODO: we should try again.
+                                    }
 
-                            @Override
-                            public void onMatrixError(MatrixError e) {
-                                Log.e(LOG_TAG, "## manageResponse() : update account data failed " + e.getMessage());
-                            }
+                                    @Override
+                                    public void onMatrixError(MatrixError e) {
+                                        Log.e(LOG_TAG, "## manageResponse() : update account data failed " + e.getMessage());
+                                    }
 
-                            @Override
-                            public void onUnexpectedError(Exception e) {
-                                Log.e(LOG_TAG, "## manageResponse() : update account data failed " + e.getMessage());
-                            }
-                        });
+                                    @Override
+                                    public void onUnexpectedError(Exception e) {
+                                        Log.e(LOG_TAG, "## manageResponse() : update account data failed " + e.getMessage(), e);
+                                    }
+                                });
                     }
                 }
 
@@ -1490,7 +1507,7 @@ public class MXDataHandler implements IMXEventListener {
 
                         if (!TextUtils.equals(membership, RoomMember.MEMBERSHIP_KICK) && !TextUtils.equals(membership, RoomMember.MEMBERSHIP_BAN)) {
                             // ensure that the room data are properly deleted
-                            this.getStore().deleteRoom(roomId);
+                            getStore().deleteRoom(roomId);
                             onLeaveRoom(roomId);
                         } else {
                             onRoomKick(roomId);
@@ -1572,14 +1589,14 @@ public class MXDataHandler implements IMXEventListener {
             try {
                 onLiveEventsChunkProcessed(fromToken, (null != syncResponse) ? syncResponse.nextBatch : fromToken);
             } catch (Exception e) {
-                Log.e(LOG_TAG, "onLiveEventsChunkProcessed failed " + e.getMessage());
+                Log.e(LOG_TAG, "onLiveEventsChunkProcessed failed " + e.getMessage(), e);
             }
 
             try {
                 // check if an incoming call has been received
                 mCallsManager.checkPendingIncomingCalls();
             } catch (Exception e) {
-                Log.e(LOG_TAG, "checkPendingIncomingCalls failed " + e + " " + e.getMessage());
+                Log.e(LOG_TAG, "checkPendingIncomingCalls failed " + e + " " + e.getMessage(), e);
             }
         }
     }
@@ -1706,7 +1723,7 @@ public class MXDataHandler implements IMXEventListener {
                     @Override
                     public void onNetworkError(Exception e) {
                         synchronized (mLeftRoomsRefreshCallbacks) {
-                            Log.d(LOG_TAG, "## refreshHistoricalRoomsList() : failed " + e.getMessage());
+                            Log.e(LOG_TAG, "## refreshHistoricalRoomsList() : failed " + e.getMessage(), e);
 
                             for (ApiCallback<Void> c : mLeftRoomsRefreshCallbacks) {
                                 c.onNetworkError(e);
@@ -1718,7 +1735,7 @@ public class MXDataHandler implements IMXEventListener {
                     @Override
                     public void onMatrixError(MatrixError e) {
                         synchronized (mLeftRoomsRefreshCallbacks) {
-                            Log.d(LOG_TAG, "## refreshHistoricalRoomsList() : failed " + e.getMessage());
+                            Log.e(LOG_TAG, "## refreshHistoricalRoomsList() : failed " + e.getMessage());
 
                             for (ApiCallback<Void> c : mLeftRoomsRefreshCallbacks) {
                                 c.onMatrixError(e);
@@ -1730,7 +1747,7 @@ public class MXDataHandler implements IMXEventListener {
                     @Override
                     public void onUnexpectedError(Exception e) {
                         synchronized (mLeftRoomsRefreshCallbacks) {
-                            Log.d(LOG_TAG, "## refreshHistoricalRoomsList() : failed " + e.getMessage());
+                            Log.e(LOG_TAG, "## refreshHistoricalRoomsList() : failed " + e.getMessage(), e);
 
                             for (ApiCallback<Void> c : mLeftRoomsRefreshCallbacks) {
                                 c.onUnexpectedError(e);
@@ -1743,7 +1760,7 @@ public class MXDataHandler implements IMXEventListener {
         }
     }
 
-    /*         
+    /*
      * Handle a 'toDevice' event
      * @param event the event
      */
@@ -1751,7 +1768,9 @@ public class MXDataHandler implements IMXEventListener {
         // Decrypt event if necessary
         decryptEvent(event, null);
 
-        if (TextUtils.equals(event.getType(), Event.EVENT_TYPE_MESSAGE) && (null != event.getContent()) && TextUtils.equals(JsonUtils.getMessageMsgType(event.getContent()), "m.bad.encrypted")) {
+        if (TextUtils.equals(event.getType(), Event.EVENT_TYPE_MESSAGE)
+                && (null != event.getContent())
+                && TextUtils.equals(JsonUtils.getMessageMsgType(event.getContent()), "m.bad.encrypted")) {
             Log.e(LOG_TAG, "## handleToDeviceEvent() : Warning: Unable to decrypt to-device event : " + event.getContent());
         } else {
             onToDeviceEvent(event);
@@ -1803,7 +1822,7 @@ public class MXDataHandler implements IMXEventListener {
     //================================================================================
 
     /**
-     * @return the current MXEvents listeners .
+     * @return the current MXEvents listeners.
      */
     private List<IMXEventListener> getListenersSnapshot() {
         List<IMXEventListener> eventListeners;
@@ -1832,7 +1851,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onStoreReady();
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onStoreReady " + e.getMessage());
+                        Log.e(LOG_TAG, "onStoreReady " + e.getMessage(), e);
                     }
                 }
             }
@@ -1854,7 +1873,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onAccountInfoUpdate(myUser);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onAccountInfoUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onAccountInfoUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -1876,7 +1895,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onPresenceUpdate(event, user);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onPresenceUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onPresenceUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -1911,7 +1930,9 @@ public class MXDataHandler implements IMXEventListener {
 
         String type = event.getType();
 
-        if (!TextUtils.equals(Event.EVENT_TYPE_TYPING, type) && !TextUtils.equals(Event.EVENT_TYPE_RECEIPT, type) && !TextUtils.equals(Event.EVENT_TYPE_TYPING, type)) {
+        if (!TextUtils.equals(Event.EVENT_TYPE_TYPING, type)
+                && !TextUtils.equals(Event.EVENT_TYPE_RECEIPT, type)
+                && !TextUtils.equals(Event.EVENT_TYPE_TYPING, type)) {
             synchronized (mUpdatedRoomIdList) {
                 mUpdatedRoomIdList.add(roomState.roomId);
             }
@@ -1930,7 +1951,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onLiveEvent(event, roomState);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onLiveEvent " + e.getMessage());
+                        Log.e(LOG_TAG, "onLiveEvent " + e.getMessage(), e);
                     }
                 }
             }
@@ -1939,6 +1960,9 @@ public class MXDataHandler implements IMXEventListener {
 
     @Override
     public void onLiveEventsChunkProcessed(final String startToken, final String toToken) {
+        // reset the resource limit exceeded error
+        mResourceLimitExceededError = null;
+
         refreshUnreadCounters();
 
         if (null != mCryptoEventsListener) {
@@ -1954,7 +1978,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onLiveEventsChunkProcessed(startToken, toToken);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onLiveEventsChunkProcessed " + e.getMessage());
+                        Log.e(LOG_TAG, "onLiveEventsChunkProcessed " + e.getMessage(), e);
                     }
                 }
             }
@@ -1980,7 +2004,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onBingEvent(event, roomState, bingRule);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onBingEvent " + e.getMessage());
+                        Log.e(LOG_TAG, "onBingEvent " + e.getMessage(), e);
                     }
                 }
             }
@@ -2016,7 +2040,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onEventSentStateUpdated(event);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onEventSentStateUpdated " + e.getMessage());
+                        Log.e(LOG_TAG, "onEventSentStateUpdated " + e.getMessage(), e);
                     }
                 }
             }
@@ -2042,7 +2066,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onEventSent(event, prevEventId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onEventSent " + e.getMessage());
+                        Log.e(LOG_TAG, "onEventSent " + e.getMessage(), e);
                     }
                 }
             }
@@ -2064,7 +2088,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onBingRulesUpdate();
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onBingRulesUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onBingRulesUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -2092,7 +2116,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onInitialSyncComplete(mInitialSyncToToken);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onInitialSyncComplete " + e.getMessage());
+                        Log.e(LOG_TAG, "onInitialSyncComplete " + e.getMessage(), e);
                     }
                 }
             }
@@ -2112,7 +2136,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onCryptoSyncComplete();
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "OnCryptoSyncComplete " + e.getMessage());
+                        Log.e(LOG_TAG, "OnCryptoSyncComplete " + e.getMessage(), e);
                     }
                 }
             }
@@ -2160,6 +2184,29 @@ public class MXDataHandler implements IMXEventListener {
     }
 
     @Override
+    public void onSyncError(final MatrixError matrixError) {
+        // Store the resource limit exceeded error
+        if (MatrixError.RESOURCE_LIMIT_EXCEEDED.equals(matrixError.errcode)) {
+            mResourceLimitExceededError = matrixError;
+        }
+
+        final List<IMXEventListener> eventListeners = getListenersSnapshot();
+
+        mUiHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (IMXEventListener listener : eventListeners) {
+                    try {
+                        listener.onSyncError(matrixError);
+                    } catch (Exception e) {
+                        Log.e(LOG_TAG, "onSyncError " + e.getMessage(), e);
+                    }
+                }
+            }
+        });
+    }
+
+    @Override
     public void onCryptoSyncComplete() {
     }
 
@@ -2182,7 +2229,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onNewRoom(roomId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onNewRoom " + e.getMessage());
+                        Log.e(LOG_TAG, "onNewRoom " + e.getMessage(), e);
                     }
                 }
             }
@@ -2208,7 +2255,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onJoinRoom(roomId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onJoinRoom " + e.getMessage());
+                        Log.e(LOG_TAG, "onJoinRoom " + e.getMessage(), e);
                     }
                 }
             }
@@ -2234,7 +2281,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onRoomInitialSyncComplete(roomId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onRoomInitialSyncComplete " + e.getMessage());
+                        Log.e(LOG_TAG, "onRoomInitialSyncComplete " + e.getMessage(), e);
                     }
                 }
             }
@@ -2260,7 +2307,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onRoomInternalUpdate(roomId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onRoomInternalUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onRoomInternalUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -2286,7 +2333,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onNotificationCountUpdate(roomId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onNotificationCountUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onNotificationCountUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -2312,7 +2359,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onLeaveRoom(roomId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onLeaveRoom " + e.getMessage());
+                        Log.e(LOG_TAG, "onLeaveRoom " + e.getMessage(), e);
                     }
                 }
             }
@@ -2338,7 +2385,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onRoomKick(roomId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onRoomKick " + e.getMessage());
+                        Log.e(LOG_TAG, "onRoomKick " + e.getMessage(), e);
                     }
                 }
             }
@@ -2369,7 +2416,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onReceiptEvent(roomId, senderIds);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onReceiptEvent " + e.getMessage());
+                        Log.e(LOG_TAG, "onReceiptEvent " + e.getMessage(), e);
                     }
                 }
             }
@@ -2395,7 +2442,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onRoomTagEvent(roomId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onRoomTagEvent " + e.getMessage());
+                        Log.e(LOG_TAG, "onRoomTagEvent " + e.getMessage(), e);
                     }
                 }
             }
@@ -2421,7 +2468,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onReadMarkerEvent(roomId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onReadMarkerEvent " + e.getMessage());
+                        Log.e(LOG_TAG, "onReadMarkerEvent " + e.getMessage(), e);
                     }
                 }
             }
@@ -2447,7 +2494,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onRoomFlush(roomId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onRoomFlush " + e.getMessage());
+                        Log.e(LOG_TAG, "onRoomFlush " + e.getMessage(), e);
                     }
                 }
             }
@@ -2469,7 +2516,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onIgnoredUsersListUpdate();
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onIgnoredUsersListUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onIgnoredUsersListUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -2495,7 +2542,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onToDeviceEvent(event);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "OnToDeviceEvent " + e.getMessage());
+                        Log.e(LOG_TAG, "OnToDeviceEvent " + e.getMessage(), e);
                     }
                 }
             }
@@ -2513,7 +2560,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onDirectMessageChatRoomsListUpdate();
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onDirectMessageChatRoomsListUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onDirectMessageChatRoomsListUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -2531,7 +2578,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onEventDecrypted(event);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onDecryptedEvent " + e.getMessage());
+                        Log.e(LOG_TAG, "onDecryptedEvent " + e.getMessage(), e);
                     }
                 }
             }
@@ -2550,7 +2597,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onNewGroupInvitation(groupId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onNewGroupInvitation " + e.getMessage());
+                        Log.e(LOG_TAG, "onNewGroupInvitation " + e.getMessage(), e);
                     }
                 }
             }
@@ -2568,7 +2615,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onJoinGroup(groupId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onJoinGroup " + e.getMessage());
+                        Log.e(LOG_TAG, "onJoinGroup " + e.getMessage(), e);
                     }
                 }
             }
@@ -2586,7 +2633,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onLeaveGroup(groupId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onLeaveGroup " + e.getMessage());
+                        Log.e(LOG_TAG, "onLeaveGroup " + e.getMessage(), e);
                     }
                 }
             }
@@ -2604,7 +2651,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onGroupProfileUpdate(groupId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onGroupProfileUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onGroupProfileUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -2622,7 +2669,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onGroupRoomsListUpdate(groupId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onGroupRoomsListUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onGroupRoomsListUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -2640,7 +2687,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onGroupUsersListUpdate(groupId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onGroupUsersListUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onGroupUsersListUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -2658,7 +2705,7 @@ public class MXDataHandler implements IMXEventListener {
                     try {
                         listener.onGroupInvitedUsersListUpdate(groupId);
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "onGroupInvitedUsersListUpdate " + e.getMessage());
+                        Log.e(LOG_TAG, "onGroupInvitedUsersListUpdate " + e.getMessage(), e);
                     }
                 }
             }
@@ -2669,7 +2716,7 @@ public class MXDataHandler implements IMXEventListener {
      * @return the direct chat room ids list
      */
     public List<String> getDirectChatRoomIdsList() {
-        if (null != mLocalDirectChatRoomIdsList) return  mLocalDirectChatRoomIdsList;
+        if (null != mLocalDirectChatRoomIdsList) return mLocalDirectChatRoomIdsList;
 
         IMXStore store = getStore();
         List<String> directChatRoomIdsList = new ArrayList<>();
@@ -2689,42 +2736,11 @@ public class MXDataHandler implements IMXEventListener {
         if (null != listOfList) {
             for (List<String> list : listOfList) {
                 for (String roomId : list) {
-                    // test if the room is defined once and exists
-                    if ((directChatRoomIdsList.indexOf(roomId) < 0) && (null != store.getRoom(roomId))) {
+                    // test if the room is defined once
+                    if ((directChatRoomIdsList.indexOf(roomId) < 0)) {
                         directChatRoomIdsList.add(roomId);
                     }
                 }
-            }
-        } else {
-            // background compatibility heuristic (named looksLikeDirectMessageRoom in the JS)
-            ArrayList<RoomIdsListRetroCompat> directChatRoomIdsListRetValue = new ArrayList<>();
-            getDirectChatRoomIdsListRetroCompat(store, directChatRoomIdsListRetValue);
-
-            // force direct chat room list to be updated with retro compatibility rooms values
-            if (0 != directChatRoomIdsListRetValue.size()) {
-                forceDirectChatRoomValue(directChatRoomIdsListRetValue, new ApiCallback<Void>() {
-                    @Override
-                    public void onSuccess(Void info) {
-                        Log.d(LOG_TAG, "## getDirectChatRoomIdsList(): background compatibility heuristic => account_data update succeed");
-                    }
-
-                    @Override
-                    public void onMatrixError(MatrixError e) {
-                        if (MatrixError.FORBIDDEN.equals(e.errcode)) {
-                            Log.e(LOG_TAG, "## getDirectChatRoomIdsList(): onMatrixError Msg=" + e.error);
-                        }
-                    }
-
-                    @Override
-                    public void onNetworkError(Exception e) {
-                        Log.e(LOG_TAG, "## getDirectChatRoomIdsList(): onNetworkError Msg=" + e.getMessage());
-                    }
-
-                    @Override
-                    public void onUnexpectedError(Exception e) {
-                        Log.e(LOG_TAG, "## getDirectChatRoomIdsList(): onUnexpectedError Msg=" + e.getMessage());
-                    }
-                });
             }
         }
 
@@ -2753,33 +2769,6 @@ public class MXDataHandler implements IMXEventListener {
     }
 
     /**
-     * For the value account_data with the rooms list passed in aRoomIdsListToAdd for a given user ID (aParticipantUserId)<br>
-     * WARNING: this method must be used with care because it erases the account_data object.
-     *
-     * @param aRoomParticipantUserIdList the couple direct chat rooms ID / user IDs
-     * @param callback                   the asynchronous response callback
-     */
-    private void forceDirectChatRoomValue(List<RoomIdsListRetroCompat> aRoomParticipantUserIdList, ApiCallback<Void> callback) {
-        Map<String, List<String>> params = new HashMap<>();
-        List<String> roomIdsList;
-
-        if (null != aRoomParticipantUserIdList) {
-            for (RoomIdsListRetroCompat item : aRoomParticipantUserIdList) {
-                if (params.containsKey(item.mParticipantUserId)) {
-                    roomIdsList = new ArrayList<>(params.get(item.mParticipantUserId));
-                    roomIdsList.add(item.mRoomId);
-                } else {
-                    roomIdsList = new ArrayList<>();
-                    roomIdsList.add(item.mRoomId);
-                }
-                params.put(item.mParticipantUserId, roomIdsList);
-            }
-
-            mAccountDataRestClient.setAccountData(getMyUser().user_id, AccountDataRestClient.ACCOUNT_DATA_TYPE_DIRECT_MESSAGES, params, callback);
-        }
-    }
-
-    /**
      * This class defines a direct chat backward compliancyc structure
      */
     private class RoomIdsListRetroCompat {
@@ -2787,51 +2776,8 @@ public class MXDataHandler implements IMXEventListener {
         final String mParticipantUserId;
 
         public RoomIdsListRetroCompat(String aParticipantUserId, String aRoomId) {
-            this.mParticipantUserId = aParticipantUserId;
-            this.mRoomId = aRoomId;
-        }
-    }
-
-    /**
-     * Return the direct chat room list for retro compatibility with 1:1 rooms.
-     *
-     * @param aStore                         store instance
-     * @param aDirectChatRoomIdsListRetValue the other participants in the 1:1 room
-     */
-    private void getDirectChatRoomIdsListRetroCompat(IMXStore aStore, ArrayList<RoomIdsListRetroCompat> aDirectChatRoomIdsListRetValue) {
-        RoomIdsListRetroCompat item;
-
-        if ((null != aStore) && (null != aDirectChatRoomIdsListRetValue)) {
-            ArrayList<Room> rooms = new ArrayList<>(aStore.getRooms());
-            ArrayList<RoomMember> members;
-            int otherParticipantIndex;
-
-            for (Room r : rooms) {
-                // Show 1:1 chats in separate "Direct Messages" section as long as they haven't
-                // been moved to a different tag section
-                if ((r.getActiveMembers().size() == 2) && (null != r.getAccountData()) && (!r.getAccountData().hasTags())) {
-                    RoomMember roomMember = r.getMember(getMyUser().user_id);
-                    members = new ArrayList<>(r.getActiveMembers());
-
-                    if (null != roomMember) {
-                        String membership = roomMember.membership;
-
-                        if (TextUtils.equals(membership, RoomMember.MEMBERSHIP_JOIN) ||
-                                TextUtils.equals(membership, RoomMember.MEMBERSHIP_BAN) ||
-                                TextUtils.equals(membership, RoomMember.MEMBERSHIP_LEAVE)) {
-
-                            if (TextUtils.equals(members.get(0).getUserId(), getMyUser().user_id)) {
-                                otherParticipantIndex = 1;
-                            } else {
-                                otherParticipantIndex = 0;
-                            }
-
-                            item = new RoomIdsListRetroCompat(members.get(otherParticipantIndex).getUserId(), r.getRoomId());
-                            aDirectChatRoomIdsListRetValue.add(item);
-                        }
-                    }
-                }
-            }
+            mParticipantUserId = aParticipantUserId;
+            mRoomId = aRoomId;
         }
     }
 
@@ -2843,11 +2789,11 @@ public class MXDataHandler implements IMXEventListener {
      * @return the list of the direct chat room Id
      */
     public List<String> getDirectChatRoomIdsList(String aSearchedUserId) {
-        ArrayList<String> directChatRoomIdsList = new ArrayList<>();
+        List<String> directChatRoomIdsList = new ArrayList<>();
         IMXStore store = getStore();
         Room room;
 
-        HashMap<String, List<String>> params;
+        Map<String, List<String>> params;
 
         if (null != store.getDirectChatRoomsDict()) {
             params = new HashMap<>(store.getDirectChatRoomsDict());

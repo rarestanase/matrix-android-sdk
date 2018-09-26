@@ -29,7 +29,6 @@ import org.matrix.androidsdk.rest.model.sync.SyncResponse;
 import java.util.Map;
 
 import retrofit2.Call;
-import retrofit2.Callback;
 import retrofit2.http.Body;
 import retrofit2.http.GET;
 import retrofit2.http.POST;
@@ -43,11 +42,11 @@ public interface EventsApi {
 
     /**
      * Perform the initial sync to find the rooms that concern the user, the participants' presence, etc.
+     *
      * @param params the GET params.
      */
     @GET(RestClient.URI_API_PREFIX_PATH_R0 + "sync")
     Call<SyncResponse> sync(@QueryMap Map<String, Object> params);
-
 
     /**
      * Get the third party server protocols.
@@ -78,15 +77,15 @@ public interface EventsApi {
      *
      * @param searchUsersParams the search params.
      */
-    @POST(RestClient.URI_API_PREFIX_PATH_R0 + "/user_directory/search")
+    @POST(RestClient.URI_API_PREFIX_PATH_R0 + "user_directory/search")
     Call<SearchUsersRequestResponse> searchUsers(@Body SearchUsersParams searchUsersParams);
 
     /**
      * Retrieve the preview information of an URL.
      *
-     * @param url      the URL
-     * @param ts       the ts
+     * @param url the URL
+     * @param ts  the ts
      */
-    @GET(RestClient.URI_API_PREFIX_PATH_MEDIA_R0 + "/preview_url")
+    @GET(RestClient.URI_API_PREFIX_PATH_MEDIA_R0 + "preview_url")
     Call<Map<String, Object>> getURLPreview(@Query("url") String url, @Query("ts") long ts);
 }

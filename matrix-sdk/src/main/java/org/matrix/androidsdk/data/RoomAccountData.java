@@ -1,6 +1,7 @@
 /*
  * Copyright 2014 OpenMarket Ltd
  * Copyright 2017 Vector Creations Ltd
+ * Copyright 2018 New Vector Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +18,11 @@
 
 package org.matrix.androidsdk.data;
 
+import android.support.annotation.Nullable;
+
 import org.matrix.androidsdk.rest.model.Event;
 
-import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -31,7 +34,7 @@ public class RoomAccountData implements java.io.Serializable {
 
     // The tags the user defined for this room.
     // The key is the tag name. The value, the associated MXRoomTag object.
-    private HashMap<String, RoomTag> tags = null;
+    private Map<String, RoomTag> tags = null;
 
     /**
      * Process an event that modifies room account data (like m.tag event).
@@ -50,6 +53,7 @@ public class RoomAccountData implements java.io.Serializable {
      * @param key the key.
      * @return the roomTag if it is found else null
      */
+    @Nullable
     public RoomTag roomTag(String key) {
         if ((null != tags) && tags.containsKey(key)) {
             return tags.get(key);
@@ -66,8 +70,9 @@ public class RoomAccountData implements java.io.Serializable {
     }
 
     /**
-     * @return the list of keys
+     * @return the list of keys, or null if no tag
      */
+    @Nullable
     public Set<String> getKeys() {
         if (hasTags()) {
             return tags.keySet();

@@ -1,6 +1,7 @@
 /* 
  * Copyright 2014 OpenMarket Ltd
- * 
+ * Copyright 2018 New Vector Ltd
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -44,8 +45,8 @@ public class ResourceUtils {
         public String mMimeType;
 
         public Resource(InputStream contentStream, String mimeType) {
-            this.mContentStream = contentStream;
-            this.mMimeType = mimeType;
+            mContentStream = contentStream;
+            mMimeType = mimeType;
         }
 
         /**
@@ -59,9 +60,8 @@ public class ResourceUtils {
                     mContentStream.close();
                     mContentStream = null;
                 }
-
             } catch (Exception e) {
-                Log.e(LOG_TAG, "Resource.close failed " + e.getLocalizedMessage());
+                Log.e(LOG_TAG, "Resource.close failed " + e.getLocalizedMessage(), e);
             }
         }
 
@@ -141,7 +141,7 @@ public class ResourceUtils {
                 try {
                     fullSizeBitmap = BitmapFactory.decodeStream(resource.mContentStream, null, options);
                 } catch (Exception e) {
-                    Log.e(LOG_TAG, "BitmapFactory.decodeStream fails " + e.getLocalizedMessage());
+                    Log.e(LOG_TAG, "BitmapFactory.decodeStream fails " + e.getLocalizedMessage(), e);
                 }
             }
 
@@ -165,9 +165,10 @@ public class ResourceUtils {
                     }
 
                     try {
-                        thumbnailBitmap = Bitmap.createScaledBitmap((null == fullSizeBitmap) ? thumbnailBitmap : fullSizeBitmap, (int) thumbnailWidth, (int) thumbnailHeight, false);
+                        thumbnailBitmap = Bitmap.createScaledBitmap((null == fullSizeBitmap) ? thumbnailBitmap : fullSizeBitmap,
+                                (int) thumbnailWidth, (int) thumbnailHeight, false);
                     } catch (OutOfMemoryError ex) {
-                        Log.e(LOG_TAG, "createThumbnailBitmap " + ex.getMessage());
+                        Log.e(LOG_TAG, "createThumbnailBitmap " + ex.getMessage(), ex);
                     }
                 }
 

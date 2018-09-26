@@ -66,4 +66,11 @@
 <string name="notice_event_redacted">"corretto %1$s "</string>
     <string name="summary_user_sent_sticker">%1$s ha inviato un adesivo.</string>
 
-    </resources>
+    <string name="message_reply_to_prefix">In risposta a</string>
+
+    <string name="reply_to_an_image">inviato un\'immagine.</string>
+    <string name="reply_to_a_video">inviato un video.</string>
+    <string name="reply_to_an_audio_file">inviato un file audio.</string>
+    <string name="reply_to_a_file">inviato un file.</string>
+
+</resources>

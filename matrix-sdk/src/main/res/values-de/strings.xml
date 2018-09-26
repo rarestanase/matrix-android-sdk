@@ -77,4 +77,11 @@
 
 <string name="summary_user_sent_sticker">%1$s sandte einen Sticker.</string>
 
-    </resources>
+    <string name="message_reply_to_prefix">Als Antwort auf</string>
+
+    <string name="reply_to_an_image">sandte ein Bild.</string>
+    <string name="reply_to_a_video">sandte ein Video.</string>
+    <string name="reply_to_an_audio_file">sandte eine Audio-Datei.</string>
+    <string name="reply_to_a_file">sandte eine Datei.</string>
+
+</resources>

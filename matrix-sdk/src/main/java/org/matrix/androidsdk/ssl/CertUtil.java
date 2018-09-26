@@ -18,14 +18,15 @@ package org.matrix.androidsdk.ssl;
 
 import android.util.Pair;
 
-import org.matrix.androidsdk.util.Log;
 import org.matrix.androidsdk.HomeServerConnectionConfig;
+import org.matrix.androidsdk.util.Log;
 
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.net.ssl.HostnameVerifier;
@@ -37,6 +38,10 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
+
+import okhttp3.CipherSuite;
+import okhttp3.ConnectionSpec;
+import okhttp3.TlsVersion;
 
 /**
  * Various utility classes for dealing with X509Certificates
@@ -151,7 +156,7 @@ public class CertUtil {
                 try {
                     tf = TrustManagerFactory.getInstance("PKIX");
                 } catch (Exception e) {
-                    Log.e(LOG_TAG, "## newPinnedSSLSocketFactory() : TrustManagerFactory.getInstance failed " + e.getMessage());
+                    Log.e(LOG_TAG, "## newPinnedSSLSocketFactory() : TrustManagerFactory.getInstance failed " + e.getMessage(), e);
                 }
 
                 // it doesn't exist, use the default one.
@@ -159,7 +164,7 @@ public class CertUtil {
                     try {
                         tf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
                     } catch (Exception e) {
-                        Log.e(LOG_TAG, "## addRule : onBingRuleUpdateFailure failed " + e.getMessage());
+                        Log.e(LOG_TAG, "## addRule : onBingRuleUpdateFailure failed " + e.getMessage(), e);
                     }
                 }
 
@@ -191,7 +196,7 @@ public class CertUtil {
     /**
      * Create a Host name verifier for a hs config.
      *
-     * @param hsConfig teh hs config.
+     * @param hsConfig the hs config.
      * @return a new HostnameVerifier.
      */
     public static HostnameVerifier newHostnameVerifier(HomeServerConnectionConfig hsConfig) {
@@ -222,5 +227,37 @@ public class CertUtil {
                 return false;
             }
         };
+    }
+
+    /**
+     * Create a list of accepted TLS specifications for a hs config.
+     *
+     * @param hsConfig the hs config.
+     * @return a list of accepted TLS specifications.
+     */
+    public static List<ConnectionSpec> newConnectionSpecs(HomeServerConnectionConfig hsConfig) {
+        final ConnectionSpec.Builder builder = new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS);
+
+        final List<TlsVersion> tlsVersions = hsConfig.getAcceptedTlsVersions();
+        if (null != tlsVersions) {
+            builder.tlsVersions(tlsVersions.toArray(new TlsVersion[0]));
+        }
+
+        final List<CipherSuite> tlsCipherSuites = hsConfig.getAcceptedTlsCipherSuites();
+        if (null != tlsCipherSuites) {
+            builder.cipherSuites(tlsCipherSuites.toArray(new CipherSuite[0]));
+        }
+
+        builder.supportsTlsExtensions(hsConfig.shouldAcceptTlsExtensions());
+
+        List<ConnectionSpec> list = new ArrayList<>();
+
+        list.add(builder.build());
+
+        if (hsConfig.isHttpConnectionAllowed()) {
+            list.add(ConnectionSpec.CLEARTEXT);
+        }
+
+        return list;
     }
 }
