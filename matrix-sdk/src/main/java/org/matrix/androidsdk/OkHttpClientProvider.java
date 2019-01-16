@@ -1,7 +1,5 @@
 package org.matrix.androidsdk;
 
-import android.support.annotation.Nullable;
-
 import com.facebook.stetho.okhttp3.StethoInterceptor;
 
 import org.matrix.androidsdk.rest.client.MXRestExecutorService;
@@ -16,8 +14,6 @@ import java.util.concurrent.TimeUnit;
 
 import okhttp3.CertificatePinner;
 import okhttp3.Dispatcher;
-import okhttp3.EventListener;
-import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -39,7 +35,8 @@ public final class OkHttpClientProvider {
     private static OkHttpClient downloadOkHttpClient;
     private static int uploadParametersHash = 0;
     private static OkHttpClient uploadOkHttpClient;
-    private static EventListener.Factory eventListenerFactory;
+    private static OkHttpConfigBuilder restOkHttpConfigBuilder;
+    private static OkHttpConfigBuilder mediaOkHttpConfigBuilder;
 
 
     private OkHttpClientProvider() {
@@ -102,41 +99,47 @@ public final class OkHttpClientProvider {
         boolean useMXExececutor
     ) {
         OkHttpClient.Builder okHttpClientBuilder = new OkHttpClient()
-            .newBuilder()
-            .eventListenerFactory(eventListenerFactory)
+            .newBuilder();
+
+        okHttpClientBuilder = configureCertificatPinning(hsConfig, okHttpClientBuilder);
+        okHttpClientBuilder = restOkHttpConfigBuilder.applyConfig(okHttpClientBuilder);
+
+        okHttpClientBuilder = okHttpClientBuilder
             .connectTimeout(CONNECTION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .writeTimeout(WRITE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            .addInterceptor(makeAuthenticationInterceptor(
-                UserAgentProvider.getUserAgent(),
-                credentials
-            ))
             .addInterceptor(makeConnectivityInterceptor(unsentEventsManager))
             .addInterceptor(makeFirstSyncHackInterceptor())
             .addNetworkInterceptor(new StethoInterceptor());
-        configureCertificatPinning(hsConfig, okHttpClientBuilder);
         if (useMXExececutor) {
-            okHttpClientBuilder.dispatcher(new Dispatcher(new MXRestExecutorService()));
+            okHttpClientBuilder = okHttpClientBuilder.dispatcher(new Dispatcher(new MXRestExecutorService()));
         }
         restOkHttpClient = okHttpClientBuilder.build();
     }
 
     private static void initDownloadOkHttpClient(HomeServerConnectionConfig hsConfig) {
         OkHttpClient.Builder okHttpClientBuilder = new OkHttpClient()
-            .newBuilder()
-            .readTimeout(DOWNLOAD_READ_TIME_OUT_MS, TimeUnit.MILLISECONDS);
-        configureCertificatPinning(hsConfig, okHttpClientBuilder);
-        downloadOkHttpClient = okHttpClientBuilder.build();
+            .newBuilder();
+
+        okHttpClientBuilder = configureCertificatPinning(hsConfig, okHttpClientBuilder);
+        okHttpClientBuilder = mediaOkHttpConfigBuilder.applyConfig(okHttpClientBuilder);
+
+        downloadOkHttpClient = okHttpClientBuilder
+            .readTimeout(DOWNLOAD_READ_TIME_OUT_MS, TimeUnit.MILLISECONDS)
+            .build();
     }
 
     private static void initUploadOkHttpClient() {
         OkHttpClient.Builder okHttpClientBuilder = new OkHttpClient()
             .newBuilder()
             .cache(null);
+
+        okHttpClientBuilder = mediaOkHttpConfigBuilder.applyConfig(okHttpClientBuilder);
+
         uploadOkHttpClient = okHttpClientBuilder.build();
     }
 
-    public static void configureCertificatPinning(
+    public static OkHttpClient.Builder configureCertificatPinning(
         HomeServerConnectionConfig hsConfig,
         OkHttpClient.Builder okHttpClientBuilder
     ) {
@@ -147,39 +150,9 @@ public final class OkHttpClientProvider {
             for (HomeServerConnectionConfig.CertificatePin certificatePin : certificatePins) {
                 builder.add(certificatePin.getHostname(), certificatePin.getPublicKeyHash());
             }
-            okHttpClientBuilder.certificatePinner(builder.build());
+            return okHttpClientBuilder.certificatePinner(builder.build());
         }
-    }
-
-    private static Interceptor makeAuthenticationInterceptor(
-        final String userAgent, final Credentials credentials
-    ) {
-        return new Interceptor() {
-            @Override public Response intercept(Chain chain) throws IOException {
-                Request request = chain.request();
-                Request.Builder newRequestBuilder = request.newBuilder();
-                if (null != userAgent) {
-                    // set a custom user agent
-                    newRequestBuilder.addHeader("User-Agent", userAgent);
-                }
-
-                // Add the access token to all requests if it is set
-                if ((credentials != null) && (credentials.accessToken != null)) {
-                    HttpUrl url = request
-                        .url()
-                        .newBuilder()
-                        .addEncodedQueryParameter(
-                            PARAM_ACCESS_TOKEN,
-                            credentials.accessToken
-                        ).build();
-                    newRequestBuilder.url(url);
-                }
-
-                request = newRequestBuilder.build();
-
-                return chain.proceed(request);
-            }
-        };
+        return okHttpClientBuilder;
     }
 
     private static Interceptor makeConnectivityInterceptor(
@@ -242,9 +215,15 @@ public final class OkHttpClientProvider {
         };
     }
 
-    public static void setEventListenerFactory(
-        @Nullable EventListener.Factory eventListenerFactory
-    ) {
-        OkHttpClientProvider.eventListenerFactory = eventListenerFactory;
+    public static void setRestOkHttpConfigBuilder(OkHttpConfigBuilder builderConfig) {
+        restOkHttpConfigBuilder = builderConfig;
+    }
+
+    public static void setMediaOkHttpConfigBuilder(OkHttpConfigBuilder builderConfig) {
+        mediaOkHttpConfigBuilder = builderConfig;
+    }
+
+    public interface OkHttpConfigBuilder {
+        OkHttpClient.Builder applyConfig(OkHttpClient.Builder builder);
     }
 }
