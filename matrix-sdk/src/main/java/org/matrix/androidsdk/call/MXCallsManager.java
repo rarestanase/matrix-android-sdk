@@ -76,7 +76,7 @@ public class MXCallsManager {
     private CallRestClient mCallResClient = null;
     private JsonElement mTurnServer = null;
     private Timer mTurnServerTimer = null;
-    private boolean mSuspendTurnServerRefresh = false;
+    private boolean mSuspendTurnServerRefresh = true;
 
     private CallClass mPreferredCallClass = CallClass.WEBRTC_CLASS;
 
@@ -162,7 +162,8 @@ public class MXCallsManager {
      * @return true if the call feature is supported
      */
     public boolean isSupported() {
-        return /*MXChromeCall.isSupported() || */ MXWebRtcCall.isSupported(mContext);
+        //return /*MXChromeCall.isSupported() || */ MXWebRtcCall.isSupported(mContext);
+        return false;
     }
 
     /**
@@ -797,12 +798,12 @@ public class MXCallsManager {
     public void unpauseTurnServerRefresh() {
         Log.d(LOG_TAG, "unpauseTurnServerRefresh");
 
-        mSuspendTurnServerRefresh = false;
+        //mSuspendTurnServerRefresh = false;
         if (null != mTurnServerTimer) {
             mTurnServerTimer.cancel();
             mTurnServerTimer = null;
         }
-        refreshTurnServer();
+        //refreshTurnServer();
     }
 
     /**
