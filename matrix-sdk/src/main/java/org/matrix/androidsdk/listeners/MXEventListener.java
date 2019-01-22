@@ -93,10 +93,6 @@ public class MXEventListener implements IMXEventListener {
     }
 
     @Override
-    public void onRoomInitialSyncComplete(String roomId) {
-    }
-
-    @Override
     public void onRoomInternalUpdate(String roomId) {
     }
 
@@ -166,5 +162,9 @@ public class MXEventListener implements IMXEventListener {
 
     @Override
     public void onGroupInvitedUsersListUpdate(String groupId) {
+    }
+
+    @Override
+    public void onAccountDataUpdated() {
     }
 }

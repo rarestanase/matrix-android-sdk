@@ -28,6 +28,8 @@ import org.matrix.androidsdk.RestClient;
 import org.matrix.androidsdk.rest.api.LoginApi;
 import org.matrix.androidsdk.rest.callback.ApiCallback;
 import org.matrix.androidsdk.rest.callback.RestAdapterCallback;
+import org.matrix.androidsdk.rest.callback.SimpleApiCallback;
+import org.matrix.androidsdk.rest.model.Versions;
 import org.matrix.androidsdk.rest.model.login.Credentials;
 import org.matrix.androidsdk.rest.model.login.LoginFlow;
 import org.matrix.androidsdk.rest.model.login.LoginFlowResponse;
@@ -53,6 +55,7 @@ public class LoginRestClient extends RestClient<LoginApi> {
     public static final String LOGIN_FLOW_TYPE_EMAIL_IDENTITY = "m.login.email.identity";
     public static final String LOGIN_FLOW_TYPE_MSISDN = "m.login.msisdn";
     public static final String LOGIN_FLOW_TYPE_RECAPTCHA = "m.login.recaptcha";
+    public static final String LOGIN_FLOW_TYPE_TERMS = "m.login.terms";
     public static final String LOGIN_FLOW_TYPE_DUMMY = "m.login.dummy";
 
     /**
@@ -61,7 +64,19 @@ public class LoginRestClient extends RestClient<LoginApi> {
      * @param hsConfig the home server connection config
      */
     public LoginRestClient(HomeServerConnectionConfig hsConfig) {
-        super(hsConfig, LoginApi.class, RestClient.URI_API_PREFIX_PATH_R0, false);
+        super(hsConfig, LoginApi.class, "", false);
+    }
+
+    /**
+     * Get Versions supported by the server and other server capabilities
+     *
+     * @param callback the callback
+     */
+    public void getVersions(final ApiCallback<Versions> callback) {
+        final String description = "getVersions";
+
+        mApi.versions()
+                .enqueue(new RestAdapterCallback<Versions>(description, mUnsentEventsManager, callback, null));
     }
 
     /**
@@ -93,7 +108,7 @@ public class LoginRestClient extends RestClient<LoginApi> {
      * Request an account creation
      *
      * @param params   the registration parameters
-     * @param callback the callbacks
+     * @param callback the callback
      */
     public void register(final RegistrationParams params, final ApiCallback<Credentials> callback) {
         final String description = "register";
@@ -113,20 +128,18 @@ public class LoginRestClient extends RestClient<LoginApi> {
         }
 
         mApi.register(params)
-                .enqueue(new RestAdapterCallback<JsonObject>(description, mUnsentEventsManager, callback, new RestAdapterCallback.RequestRetryCallBack() {
+                .enqueue(new RestAdapterCallback<Credentials>(description, mUnsentEventsManager, new SimpleApiCallback<Credentials>(callback) {
+                    @Override
+                    public void onSuccess(Credentials info) {
+                        setCredentials(info);
+                        callback.onSuccess(info);
+                    }
+                }, new RestAdapterCallback.RequestRetryCallBack() {
                     @Override
                     public void onRetry() {
                         register(params, callback);
                     }
-                }) {
-
-                    @Override
-                    public void success(JsonObject jsonObject, Response response) {
-                        onEventSent();
-                        mCredentials = gson.fromJson(jsonObject, Credentials.class);
-                        callback.onSuccess(mCredentials);
-                    }
-                });
+                }));
     }
 
     /**
@@ -259,19 +272,18 @@ public class LoginRestClient extends RestClient<LoginApi> {
      */
     private void login(final LoginParams params, final ApiCallback<Credentials> callback, final String description) {
         mApi.login(params)
-                .enqueue(new RestAdapterCallback<JsonObject>(description, mUnsentEventsManager, callback, new RestAdapterCallback.RequestRetryCallBack() {
+                .enqueue(new RestAdapterCallback<Credentials>(description, mUnsentEventsManager, new SimpleApiCallback<Credentials>(callback) {
+                    @Override
+                    public void onSuccess(Credentials info) {
+                        setCredentials(info);
+                        callback.onSuccess(info);
+                    }
+                }, new RestAdapterCallback.RequestRetryCallBack() {
                     @Override
                     public void onRetry() {
                         login(params, callback, description);
                     }
-                }) {
-                    @Override
-                    public void success(JsonObject jsonObject, Response<JsonObject> response) {
-                        onEventSent();
-                        mCredentials = gson.fromJson(jsonObject, Credentials.class);
-                        callback.onSuccess(mCredentials);
-                    }
-                });
+                }));
     }
 
     /**
@@ -312,19 +324,18 @@ public class LoginRestClient extends RestClient<LoginApi> {
         }
 
         mApi.login(params)
-                .enqueue(new RestAdapterCallback<JsonObject>(description, mUnsentEventsManager, callback, new RestAdapterCallback.RequestRetryCallBack() {
+                .enqueue(new RestAdapterCallback<Credentials>(description, mUnsentEventsManager, new SimpleApiCallback<Credentials>(callback) {
+                    @Override
+                    public void onSuccess(Credentials info) {
+                        setCredentials(info);
+                        callback.onSuccess(info);
+                    }
+                }, new RestAdapterCallback.RequestRetryCallBack() {
                     @Override
                     public void onRetry() {
                         loginWithToken(user, token, txn_id, callback);
                     }
-                }) {
-                    @Override
-                    public void success(JsonObject jsonObject, Response response) {
-                        onEventSent();
-                        mCredentials = gson.fromJson(jsonObject, Credentials.class);
-                        callback.onSuccess(mCredentials);
-                    }
-                });
+                }));
     }
 
     /**
@@ -332,12 +343,12 @@ public class LoginRestClient extends RestClient<LoginApi> {
      *
      * @param callback the callback success and failure callback
      */
-    public void logout(final ApiCallback<JsonObject> callback) {
+    public void logout(final ApiCallback<Void> callback) {
         // privacy
         final String description = "logout user";
 
         mApi.logout()
-                .enqueue(new RestAdapterCallback<JsonObject>(description, mUnsentEventsManager, callback, new RestAdapterCallback.RequestRetryCallBack() {
+                .enqueue(new RestAdapterCallback<Void>(description, mUnsentEventsManager, callback, new RestAdapterCallback.RequestRetryCallBack() {
                     @Override
                     public void onRetry() {
                         logout(callback);

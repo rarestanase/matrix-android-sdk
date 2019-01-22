@@ -23,7 +23,6 @@ import org.matrix.androidsdk.RestClient;
 import org.matrix.androidsdk.rest.api.ProfileApi;
 import org.matrix.androidsdk.rest.callback.ApiCallback;
 import org.matrix.androidsdk.rest.callback.RestAdapterCallback;
-import org.matrix.androidsdk.rest.model.AuthParams;
 import org.matrix.androidsdk.rest.model.ChangePasswordParams;
 import org.matrix.androidsdk.rest.model.DeactivateAccountParams;
 import org.matrix.androidsdk.rest.model.ForgetPasswordParams;
@@ -34,7 +33,10 @@ import org.matrix.androidsdk.rest.model.RequestPhoneNumberValidationParams;
 import org.matrix.androidsdk.rest.model.RequestPhoneNumberValidationResponse;
 import org.matrix.androidsdk.rest.model.ThreePidCreds;
 import org.matrix.androidsdk.rest.model.User;
+import org.matrix.androidsdk.rest.model.login.AuthParamsEmailIdentity;
+import org.matrix.androidsdk.rest.model.login.AuthParamsLoginPassword;
 import org.matrix.androidsdk.rest.model.login.Credentials;
+import org.matrix.androidsdk.rest.model.login.ThreePidCredentials;
 import org.matrix.androidsdk.rest.model.login.TokenRefreshParams;
 import org.matrix.androidsdk.rest.model.login.TokenRefreshResponse;
 import org.matrix.androidsdk.rest.model.pid.AccountThreePidsResponse;
@@ -44,7 +46,6 @@ import org.matrix.androidsdk.rest.model.pid.ThirdPartyIdentifier;
 import org.matrix.androidsdk.rest.model.pid.ThreePid;
 
 import java.util.List;
-import java.util.Map;
 
 import retrofit2.Response;
 
@@ -96,12 +97,13 @@ public class ProfileRestClient extends RestClient<ProfileApi> {
         //final String description = "updateDisplayname newName : " + newName;
         final String description = "update display name";
 
+        // TODO Do not create a User for this
         User user = new User();
         user.displayname = newName;
 
         // don't retry if the network comes back
         // let the user chooses what he want to do
-        mApi.displayname(mCredentials.userId, user)
+        mApi.displayname(getCredentials().userId, user)
                 .enqueue(new RestAdapterCallback<Void>(description, mUnsentEventsManager, callback, new RestAdapterCallback.RequestRetryCallBack() {
                     @Override
                     public void onRetry() {
@@ -145,10 +147,11 @@ public class ProfileRestClient extends RestClient<ProfileApi> {
         //final String description = "updateAvatarUrl newUrl : " + newUrl;
         final String description = "updateAvatarUrl";
 
+        // TODO Do not create a User for this
         User user = new User();
         user.setAvatarUrl(newUrl);
 
-        mApi.avatarUrl(mCredentials.userId, user)
+        mApi.avatarUrl(getCredentials().userId, user)
                 .enqueue(new RestAdapterCallback<Void>(description, mUnsentEventsManager, callback, new RestAdapterCallback.RequestRetryCallBack() {
                     @Override
                     public void onRetry() {
@@ -172,10 +175,11 @@ public class ProfileRestClient extends RestClient<ProfileApi> {
 
         ChangePasswordParams passwordParams = new ChangePasswordParams();
 
-        passwordParams.auth = new AuthParams();
-        passwordParams.auth.type = LoginRestClient.LOGIN_FLOW_TYPE_PASSWORD;
-        passwordParams.auth.user = userId;
-        passwordParams.auth.password = oldPassword;
+        AuthParamsLoginPassword auth = new AuthParamsLoginPassword();
+        auth.user = userId;
+        auth.password = oldPassword;
+
+        passwordParams.auth = auth;
         passwordParams.new_password = newPassword;
 
         mApi.updatePassword(passwordParams)
@@ -192,26 +196,27 @@ public class ProfileRestClient extends RestClient<ProfileApi> {
      * Reset the password to a new one.
      *
      * @param newPassword    the new password
-     * @param threepid_creds the three pids.
+     * @param threePidCredentials the three pids.
      * @param callback       the callback
      */
-    public void resetPassword(final String newPassword, final Map<String, String> threepid_creds, final ApiCallback<Void> callback) {
+    public void resetPassword(final String newPassword, final ThreePidCredentials threePidCredentials, final ApiCallback<Void> callback) {
         // privacy
         //final String description = "Reset password : " + threepid_creds + " newPassword " + newPassword;
         final String description = "Reset password";
 
         ChangePasswordParams passwordParams = new ChangePasswordParams();
 
-        passwordParams.auth = new AuthParams();
-        passwordParams.auth.type = "m.login.email.identity";
-        passwordParams.auth.threepid_creds = threepid_creds;
+        AuthParamsEmailIdentity auth = new AuthParamsEmailIdentity();
+        auth.threePidCredentials = threePidCredentials;
+
+        passwordParams.auth = auth;
         passwordParams.new_password = newPassword;
 
         mApi.updatePassword(passwordParams)
                 .enqueue(new RestAdapterCallback<Void>(description, mUnsentEventsManager, callback, new RestAdapterCallback.RequestRetryCallBack() {
                     @Override
                     public void onRetry() {
-                        resetPassword(newPassword, threepid_creds, callback);
+                        resetPassword(newPassword, threePidCredentials, callback);
                     }
                 }));
     }
@@ -256,22 +261,19 @@ public class ProfileRestClient extends RestClient<ProfileApi> {
     /**
      * Deactivate account
      *
-     * @param type          type of authentication
      * @param userId        current user id
      * @param userPassword  current password
      * @param eraseUserData true to also erase all the user data
      * @param callback      the callback
      */
-    public void deactivateAccount(final String type,
-                                  final String userId,
+    public void deactivateAccount(final String userId,
                                   final String userPassword,
                                   final boolean eraseUserData,
                                   final ApiCallback<Void> callback) {
         final String description = "deactivate account";
 
         final DeactivateAccountParams params = new DeactivateAccountParams();
-        params.auth = new AuthParams();
-        params.auth.type = type;
+        params.auth = new AuthParamsLoginPassword();
         params.auth.user = userId;
         params.auth.password = userPassword;
 
@@ -281,7 +283,7 @@ public class ProfileRestClient extends RestClient<ProfileApi> {
                 .enqueue(new RestAdapterCallback<Void>(description, mUnsentEventsManager, callback, new RestAdapterCallback.RequestRetryCallBack() {
                     @Override
                     public void onRetry() {
-                        deactivateAccount(type, userId, userPassword, eraseUserData, callback);
+                        deactivateAccount(userId, userPassword, eraseUserData, callback);
                     }
                 }));
     }
@@ -295,17 +297,17 @@ public class ProfileRestClient extends RestClient<ProfileApi> {
         final String description = "refreshTokens";
 
         TokenRefreshParams params = new TokenRefreshParams();
-        params.refresh_token = mCredentials.refreshToken;
+        params.refresh_token = getCredentials().refreshToken;
 
-        mApi.tokenrefresh(params)
+        mApi.tokenRefresh(params)
                 .enqueue(new RestAdapterCallback<TokenRefreshResponse>(description, mUnsentEventsManager, callback, null) {
                     @Override
-                    public void success(TokenRefreshResponse tokenreponse, Response response) {
+                    public void success(TokenRefreshResponse tokenResponse, Response response) {
                         onEventSent();
-                        mCredentials.refreshToken = tokenreponse.refresh_token;
-                        mCredentials.accessToken = tokenreponse.access_token;
+                        getCredentials().refreshToken = tokenResponse.refreshToken;
+                        getCredentials().accessToken = tokenResponse.accessToken;
                         if (null != callback) {
-                            callback.onSuccess(mCredentials);
+                            callback.onSuccess(getCredentials());
                         }
                     }
                 });

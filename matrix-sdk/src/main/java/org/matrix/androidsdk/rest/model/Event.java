@@ -23,10 +23,11 @@ import android.text.TextUtils;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 
 import org.matrix.androidsdk.crypto.MXCryptoError;
 import org.matrix.androidsdk.crypto.MXEventDecryptionResult;
-import org.matrix.androidsdk.db.MXMediasCache;
+import org.matrix.androidsdk.db.MXMediaCache;
 import org.matrix.androidsdk.rest.model.crypto.EncryptedFileInfo;
 import org.matrix.androidsdk.rest.model.message.FileMessage;
 import org.matrix.androidsdk.rest.model.message.ImageMessage;
@@ -62,18 +63,25 @@ public class Event implements Externalizable {
     private static final long serialVersionUID = -1431845331022808337L;
 
     public enum SentState {
-        UNSENT,  // the event has not been sent
-        ENCRYPTING, // the event is encrypting
-        SENDING, // the event is currently sending
-        WAITING_RETRY, // the event is going to be resent asap
-        SENT,    // the event has been sent
-        UNDELIVERABLE,   // The event failed to be sent
-        FAILED_UNKNOWN_DEVICES // the event failed to be sent because some unknown devices have been found while encrypting it
+        // the event has not been sent
+        UNSENT,
+        // the event is encrypting
+        ENCRYPTING,
+        // the event is currently sending
+        SENDING,
+        // the event is going to be resent asap
+        WAITING_RETRY,
+        // the event has been sent
+        SENT,
+        // The event failed to be sent
+        UNDELIVERED,
+        // the event failed to be sent because some unknown devices have been found while encrypting it
+        FAILED_UNKNOWN_DEVICES
     }
 
     // when there is no more message to be paginated in a room
     // the server returns a null token.
-    // defines by a non null one to ben able tp store it.
+    // defines by a non null one to be able to store it.
     public static final String PAGINATE_BACK_TOKEN_END = "PAGINATE_BACK_TOKEN_END";
 
     public static final String EVENT_TYPE_PRESENCE = "m.presence";
@@ -85,13 +93,15 @@ public class Event implements Externalizable {
     public static final String EVENT_TYPE_TYPING = "m.typing";
     public static final String EVENT_TYPE_REDACTION = "m.room.redaction";
     public static final String EVENT_TYPE_RECEIPT = "m.receipt";
-    public static final String EVENT_TYPE_TAGS = "m.tag";
     public static final String EVENT_TYPE_ROOM_KEY = "m.room_key";
-    public static final String EVENT_TYPE_READ_MARKER = "m.fully_read";
     public static final String EVENT_TYPE_ROOM_PLUMBING = "m.room.plumbing";
     public static final String EVENT_TYPE_ROOM_BOT_OPTIONS = "m.room.bot.options";
     public static final String EVENT_TYPE_ROOM_KEY_REQUEST = "m.room_key_request";
     public static final String EVENT_TYPE_FORWARDED_ROOM_KEY = "m.forwarded_room_key";
+
+    // Possible value for room account data type
+    public static final String EVENT_TYPE_TAGS = "m.tag";
+    public static final String EVENT_TYPE_READ_MARKER = "m.fully_read";
     public static final String EVENT_TYPE_URL_PREVIEW = "org.matrix.room.preview_urls";
 
     // State events
@@ -109,6 +119,7 @@ public class Event implements Externalizable {
     public static final String EVENT_TYPE_STATE_CANONICAL_ALIAS = "m.room.canonical_alias";
     public static final String EVENT_TYPE_STATE_HISTORY_VISIBILITY = "m.room.history_visibility";
     public static final String EVENT_TYPE_STATE_RELATED_GROUPS = "m.room.related_groups";
+    public static final String EVENT_TYPE_STATE_PINNED_EVENT = "m.room.pinned_events";
 
     // call events
     public static final String EVENT_TYPE_CALL_INVITE = "m.call.invite";
@@ -140,6 +151,7 @@ public class Event implements Externalizable {
     public Long age;
 
     // Specific to state events
+    @SerializedName("state_key")
     public String stateKey;
 
     // Contains optional extra information about the event.
@@ -148,15 +160,12 @@ public class Event implements Externalizable {
     // Specific to redaction
     public String redacts;
 
-    // A subset of the state of the room at the time of the invite, if membership is invite
-    public List<Event> invite_room_state;
-
     // store the exception triggered when unsent
     public Exception unsentException = null;
     public MatrixError unsentMatrixError = null;
 
     // sent state
-    public SentState mSentState = SentState.SENT;
+    public SentState mSentState;
 
     // save the token to back paginate
     // the room history could have been reduced to save memory.
@@ -450,7 +459,8 @@ public class Event implements Externalizable {
     /**
      * @return the redacted event id.
      */
-    public String getRedacts() {
+    @Nullable
+    public String getRedactedEventId() {
         if (null != redacts) {
             return redacts;
         } else if (isRedacted()) {
@@ -474,7 +484,7 @@ public class Event implements Externalizable {
         originServerTs = System.currentTimeMillis();
         sender = userId = anUserId;
         roomId = aRoomId;
-        mSentState = Event.SentState.SENDING;
+        mSentState = Event.SentState.UNSENT;
         createDummyEventId();
     }
 
@@ -492,7 +502,7 @@ public class Event implements Externalizable {
         originServerTs = System.currentTimeMillis();
         sender = userId = anUserId;
         roomId = aRoomId;
-        mSentState = Event.SentState.SENDING;
+        mSentState = Event.SentState.UNSENT;
         createDummyEventId();
     }
 
@@ -540,10 +550,10 @@ public class Event implements Externalizable {
      * @return true if the event if a call event.
      */
     public boolean isCallEvent() {
-        return EVENT_TYPE_CALL_INVITE.equals(getType()) ||
-                EVENT_TYPE_CALL_CANDIDATES.equals(getType()) ||
-                EVENT_TYPE_CALL_ANSWER.equals(getType()) ||
-                EVENT_TYPE_CALL_HANGUP.equals(getType());
+        return EVENT_TYPE_CALL_INVITE.equals(getType())
+                || EVENT_TYPE_CALL_CANDIDATES.equals(getType())
+                || EVENT_TYPE_CALL_ANSWER.equals(getType())
+                || EVENT_TYPE_CALL_HANGUP.equals(getType());
     }
 
     public boolean isStateEvent() {
@@ -587,7 +597,6 @@ public class Event implements Externalizable {
         copy.prev_content_as_string = prev_content_as_string;
 
         copy.unsigned = unsigned;
-        copy.invite_room_state = invite_room_state;
         copy.redacts = redacts;
 
         copy.mSentState = mSentState;
@@ -608,7 +617,7 @@ public class Event implements Externalizable {
      * @return true if it can be resent.
      */
     public boolean canBeResent() {
-        return (mSentState == SentState.WAITING_RETRY) || (mSentState == SentState.UNDELIVERABLE) || (mSentState == SentState.FAILED_UNKNOWN_DEVICES);
+        return (mSentState == SentState.WAITING_RETRY) || (mSentState == SentState.UNDELIVERED) || (mSentState == SentState.FAILED_UNKNOWN_DEVICES);
     }
 
     /**
@@ -639,12 +648,12 @@ public class Event implements Externalizable {
     }
 
     /**
-     * Tell if the message is undeliverable
+     * Tell if the message sending failed
      *
-     * @return true if the event is undeliverable
+     * @return true if the event has not been sent because of a failure
      */
-    public boolean isUndeliverable() {
-        return (mSentState == SentState.UNDELIVERABLE);
+    public boolean isUndelivered() {
+        return (mSentState == SentState.UNDELIVERED);
     }
 
     /**
@@ -654,14 +663,6 @@ public class Event implements Externalizable {
      */
     public boolean isUnknownDevice() {
         return (mSentState == SentState.FAILED_UNKNOWN_DEVICES);
-    }
-
-    /**
-     * @deprecated call isUnknownDevice()
-     */
-    @Deprecated
-    public boolean isUnkownDevice() {
-        return isUnknownDevice();
     }
 
     /**
@@ -784,14 +785,14 @@ public class Event implements Externalizable {
     /**
      * Tells if the current event is uploading a media.
      *
-     * @param mediasCache the media cache
+     * @param mediaCache the media cache
      * @return true if the event is uploading a media.
      */
-    public boolean isUploadingMedias(MXMediasCache mediasCache) {
+    public boolean isUploadingMedia(MXMediaCache mediaCache) {
         List<String> urls = getMediaUrls();
 
         for (String url : urls) {
-            if (mediasCache.getProgressValueForUploadId(url) >= 0) {
+            if (mediaCache.getProgressValueForUploadId(url) >= 0) {
                 return true;
             }
         }
@@ -802,14 +803,14 @@ public class Event implements Externalizable {
     /**
      * Tells if the current event is downloading a media.
      *
-     * @param mediasCache the media cache
+     * @param mediaCache the media cache
      * @return true if the event is downloading a media.
      */
-    public boolean isDownloadingMedias(MXMediasCache mediasCache) {
+    public boolean isDownloadingMedia(MXMediaCache mediaCache) {
         List<String> urls = getMediaUrls();
 
         for (String url : urls) {
-            if (mediasCache.getProgressValueForDownloadId(mediasCache.downloadIdFromUrl(url)) >= 0) {
+            if (mediaCache.getProgressValueForDownloadId(mediaCache.downloadIdFromUrl(url)) >= 0) {
                 return true;
             }
         }
@@ -861,8 +862,8 @@ public class Event implements Externalizable {
             text += "WAITING_RETRY";
         } else if (mSentState == SentState.SENT) {
             text += "SENT";
-        } else if (mSentState == SentState.UNDELIVERABLE) {
-            text += "UNDELIVERABLE";
+        } else if (mSentState == SentState.UNDELIVERED) {
+            text += "UNDELIVERED";
         } else if (mSentState == SentState.FAILED_UNKNOWN_DEVICES) {
             text += "FAILED UNKNOWN DEVICES";
         }
@@ -924,10 +925,6 @@ public class Event implements Externalizable {
 
         if (input.readBoolean()) {
             redacts = input.readUTF();
-        }
-
-        if (input.readBoolean()) {
-            invite_room_state = (List<Event>) input.readObject();
         }
 
         if (input.readBoolean()) {
@@ -1012,11 +1009,6 @@ public class Event implements Externalizable {
         output.writeBoolean(null != redacts);
         if (null != redacts) {
             output.writeUTF(redacts);
-        }
-
-        output.writeBoolean(null != invite_room_state);
-        if (null != invite_room_state) {
-            output.writeObject(invite_room_state);
         }
 
         output.writeBoolean(null != unsentException);

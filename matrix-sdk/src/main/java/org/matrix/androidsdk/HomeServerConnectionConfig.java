@@ -18,8 +18,8 @@
 package org.matrix.androidsdk;
 
 import android.net.Uri;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.annotation.VisibleForTesting;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -42,7 +42,7 @@ public class HomeServerConnectionConfig {
 
 
     // the home server URI
-    private Uri mHsUri;
+    private Uri mHomeServerUri;
     // the identity server URI
     private Uri mIdentityServerUri;
     // the credentials
@@ -61,71 +61,15 @@ public class HomeServerConnectionConfig {
     // the accepted TLS cipher suites
     private List<CipherSuite> mTlsCipherSuites;
     // should accept TLS extensions
-    private boolean mShouldAcceptTlsExtensions;
-    // allow Http connection
-    private boolean mAllowHttpExtension;
+    private boolean mShouldAcceptTlsExtensions = true;
+    // Force usage of TLS versions
+    private boolean mForceUsageTlsVersions;
 
     /**
-     * @param hsUri The URI to use to connect to the homeserver
+     * Private constructor. Please use the Builder
      */
-    public HomeServerConnectionConfig(Uri hsUri) {
-        this(hsUri, null);
-    }
-
-    /**
-     * @param hsUri       The URI to use to connect to the homeserver
-     * @param credentials The credentials to use, if needed. Can be null.
-     */
-    public HomeServerConnectionConfig(Uri hsUri, Credentials credentials) {
-        this(hsUri, null, credentials, Collections.EMPTY_LIST);
-    }
-
-    /**
-     * @param hsUri The URI to use to connect to the homeserver
-     * @param identityServerUri The URI to use to manage identity
-     * @param credentials The credentials to use, if needed. Can be null.
-     * @param certificatePins See https://square.github.io/okhttp/3.x/okhttp/okhttp3/CertificatePinner.html.
-     */
-    public HomeServerConnectionConfig(Uri hsUri, Uri identityServerUri, Credentials credentials, List<CertificatePin> certificatePins) {
-        if (hsUri == null || (!"http".equals(hsUri.getScheme()) && !"https".equals(hsUri.getScheme()))) {
-            throw new RuntimeException("Invalid home server URI: " + hsUri);
-        }
-
-        if ((null != identityServerUri) && (!"http".equals(hsUri.getScheme()) && !"https".equals(hsUri.getScheme()))) {
-            throw new RuntimeException("Invalid identity server URI: " + identityServerUri);
-        }
-
-        // remove trailing /
-        if (hsUri.toString().endsWith("/")) {
-            try {
-                String url = hsUri.toString();
-                hsUri = Uri.parse(url.substring(0, url.length() - 1));
-            } catch (Exception e) {
-                throw new RuntimeException("Invalid home server URI: " + hsUri);
-            }
-        }
-
-        // remove trailing /
-        if ((null != identityServerUri) && identityServerUri.toString().endsWith("/")) {
-            try {
-                String url = identityServerUri.toString();
-                identityServerUri = Uri.parse(url.substring(0, url.length() - 1));
-            } catch (Exception e) {
-                throw new RuntimeException("Invalid identity server URI: " + identityServerUri);
-            }
-        }
-
-        mHsUri = hsUri;
-        mIdentityServerUri = identityServerUri;
-        mAntiVirusServerUri = null;
-
-        this.mCredentials = credentials;
-        if (certificatePins != null) {
-            this.mCertificatePins.addAll(certificatePins);
-        }
-        mCredentials = credentials;
-
-        mShouldAcceptTlsExtensions = true;
+    private HomeServerConnectionConfig() {
+        // Private constructor
     }
 
     /**
@@ -134,23 +78,14 @@ public class HomeServerConnectionConfig {
      * @param uri the new HS uri
      */
     public void setHomeserverUri(Uri uri) {
-        mHsUri = uri;
+        mHomeServerUri = uri;
     }
 
     /**
      * @return the home server uri
      */
     public Uri getHomeserverUri() {
-        return mHsUri;
-    }
-
-    /**
-     * Update the identity server uri.
-     *
-     * @param uri the new identity server uri
-     */
-    public void setIdentityServerUri(Uri uri) {
-        mIdentityServerUri = uri;
+        return mHomeServerUri;
     }
 
     public List<CertificatePin> getCertificatePins() {
@@ -164,16 +99,7 @@ public class HomeServerConnectionConfig {
             return mIdentityServerUri;
         }
         // Else consider the HS uri by default.
-        return mHsUri;
-    }
-
-    /**
-     * Update the anti-virus server URI.
-     *
-     * @param uri the new anti-virus uri
-     */
-    public void setAntiVirusServerUri(Uri uri) {
-        mAntiVirusServerUri = uri;
+        return mHomeServerUri;
     }
 
     /**
@@ -184,7 +110,7 @@ public class HomeServerConnectionConfig {
             return mAntiVirusServerUri;
         }
         // Else consider the HS uri by default.
-        return mHsUri;
+        return mHomeServerUri;
     }
 
     /**
@@ -212,37 +138,11 @@ public class HomeServerConnectionConfig {
     }
 
     /**
-     * Update the set of TLS versions accepted for TLS connections with the home server.
-     *
-     * @param tlsVersions the set of TLS versions accepted.
-     */
-    public void setAcceptedTlsVersions(@Nullable List<TlsVersion> tlsVersions) {
-        if (tlsVersions == null) {
-            mTlsVersions = null;
-        } else {
-            mTlsVersions = Collections.unmodifiableList(tlsVersions);
-        }
-    }
-
-    /**
      * TLS versions accepted for TLS connections with the home server.
      */
     @Nullable
     public List<TlsVersion> getAcceptedTlsVersions() {
         return mTlsVersions;
-    }
-
-    /**
-     * Update the set of TLS cipher suites accepted for TLS connections with the home server.
-     *
-     * @param tlsCipherSuites the set of TLS cipher suites accepted.
-     */
-    public void setAcceptedTlsCipherSuites(@Nullable List<CipherSuite> tlsCipherSuites) {
-        if (tlsCipherSuites == null) {
-            mTlsCipherSuites = null;
-        } else {
-            mTlsCipherSuites = Collections.unmodifiableList(tlsCipherSuites);
-        }
     }
 
     /**
@@ -254,14 +154,6 @@ public class HomeServerConnectionConfig {
     }
 
     /**
-     * @param shouldAcceptTlsExtensions if true TLS extensions will be accepted for TLS
-     *                                  connections with the home server.
-     */
-    public void setShouldAcceptTlsExtensions(boolean shouldAcceptTlsExtensions) {
-        mShouldAcceptTlsExtensions = shouldAcceptTlsExtensions;
-    }
-
-    /**
      * @return whether we should accept TLS extensions.
      */
     public boolean shouldAcceptTlsExtensions() {
@@ -269,25 +161,16 @@ public class HomeServerConnectionConfig {
     }
 
     /**
-     * For test only: allow Http connection
+     * @return true if the usage of TlsVersions has to be forced
      */
-    @VisibleForTesting()
-    public void allowHttpConnection() {
-        mAllowHttpExtension = true;
-    }
-
-    /**
-     * @return true if Http connection is allowed (false by default).
-     */
-    public boolean isHttpConnectionAllowed() {
-        return mAllowHttpExtension;
+    public boolean forceUsageOfTlsVersions() {
+        return mForceUsageTlsVersions;
     }
 
     @Override
     public String toString() {
         return "HomeserverConnectionConfig{" +
-                "mHsUri=" + mHsUri +
-                "mIdentityServerUri=" + mIdentityServerUri +
+                "mHomeServerUri=" + mHomeServerUri +
                 ", mIdentityServerUri=" + mIdentityServerUri +
                 ", mCredentials=" + mCredentials +
                 ", certificatePins= " + mCertificatePins +
@@ -297,7 +180,7 @@ public class HomeServerConnectionConfig {
                 ", mPin=" + mPin +
                 ", mShouldAcceptTlsExtensions=" + mShouldAcceptTlsExtensions +
                 ", mTlsVersions=" + (null == mTlsVersions ? "" : mTlsVersions.size()) +
-                ", mTlsCipherSuitess=" + (null == mTlsCipherSuites ? "" : mTlsCipherSuites.size()) +
+                ", mTlsCipherSuites=" + (null == mTlsCipherSuites ? "" : mTlsCipherSuites.size()) +
                 '}';
     }
 
@@ -310,7 +193,7 @@ public class HomeServerConnectionConfig {
     public JSONObject toJson() throws JSONException {
         JSONObject json = new JSONObject();
 
-        json.put("home_server_url", mHsUri.toString());
+        json.put("home_server_url", mHomeServerUri.toString());
         json.put("identity_server_url", getIdentityServerUri().toString());
         if (mAntiVirusServerUri != null) {
             json.put("antivirus_server_url", mAntiVirusServerUri.toString());
@@ -344,6 +227,8 @@ public class HomeServerConnectionConfig {
             json.put("tls_versions", new JSONArray(tlsVersions));
         }
 
+        json.put("force_usage_of_tls_versions", mForceUsageTlsVersions);
+
         if (mTlsCipherSuites != null) {
             List<String> tlsCipherSuites = new ArrayList<>(mTlsCipherSuites.size());
 
@@ -360,72 +245,287 @@ public class HomeServerConnectionConfig {
     /**
      * Create an object instance from the json object.
      *
-     * @param obj the json object
+     * @param jsonObject the json object
      * @return a HomeServerConnectionConfig instance
      * @throws JSONException the conversion failure reason
      */
-    public static HomeServerConnectionConfig fromJson(JSONObject obj) throws JSONException {
-        List<CertificatePin> certificatePins = new ArrayList<>();
-        if (obj.has(CERTIFICATE_PINS_JSON_KEY)) {
-            JSONArray jsonCertificatePins = obj.getJSONArray(CERTIFICATE_PINS_JSON_KEY);
-            for (int i = 0; i < jsonCertificatePins.length(); i++) {
-                certificatePins.add(CertificatePin.fromJson(jsonCertificatePins.getJSONObject(i)));
-            }
-        }
+    public static HomeServerConnectionConfig fromJson(JSONObject jsonObject) throws JSONException {
+        JSONObject credentialsObj = jsonObject.optJSONObject("credentials");
+        Credentials creds = credentialsObj != null ? Credentials.fromJson(credentialsObj) : null;
 
-        JSONArray fingerprintArray = obj.optJSONArray("fingerprints");
-        List<Fingerprint> fingerprints = new ArrayList<>();
+        Builder builder = new Builder()
+                .withHomeServerUri(Uri.parse(jsonObject.getString("home_server_url")))
+                .withIdentityServerUri(jsonObject.has("identity_server_url") ? Uri.parse(jsonObject.getString("identity_server_url")) : null)
+                .withCredentials(creds)
+                .withPin(jsonObject.optBoolean("pin", false));
+
+        JSONArray fingerprintArray = jsonObject.optJSONArray("fingerprints");
         if (fingerprintArray != null) {
             for (int i = 0; i < fingerprintArray.length(); i++) {
-                fingerprints.add(Fingerprint.fromJson(fingerprintArray.getJSONObject(i)));
+                builder.addAllowedFingerPrint(Fingerprint.fromJson(fingerprintArray.getJSONObject(i)));
             }
         }
-        JSONObject credentialsObj = obj.optJSONObject("credentials");
-        Credentials creds = credentialsObj != null ? Credentials.fromJson(credentialsObj) : null;
-        HomeServerConnectionConfig config = new HomeServerConnectionConfig(
-            Uri.parse(obj.getString("home_server_url")),
-            obj.has("identity_server_url") ? Uri.parse(obj.getString("identity_server_url")) : null,
-            creds,
-            certificatePins
-        );
 
         // Set the anti-virus server uri if any
-        if (obj.has("antivirus_server_url")) {
-            config.setAntiVirusServerUri(Uri.parse(obj.getString("antivirus_server_url")));
+        if (jsonObject.has("antivirus_server_url")) {
+            builder.withAntiVirusServerUri(Uri.parse(jsonObject.getString("antivirus_server_url")));
         }
 
-        config.setShouldAcceptTlsExtensions(obj.optBoolean("tls_extensions", true));
+        builder.withShouldAcceptTlsExtensions(jsonObject.optBoolean("tls_extensions", true));
 
         // Set the TLS versions if any
-        if (obj.has("tls_versions")) {
-            List<TlsVersion> tlsVersions = new ArrayList<>();
-            JSONArray tlsVersionsArray = obj.optJSONArray("tls_versions");
+        if (jsonObject.has("tls_versions")) {
+            JSONArray tlsVersionsArray = jsonObject.optJSONArray("tls_versions");
             if (tlsVersionsArray != null) {
                 for (int i = 0; i < tlsVersionsArray.length(); i++) {
-                    tlsVersions.add(TlsVersion.forJavaName(tlsVersionsArray.getString(i)));
+                    builder.addAcceptedTlsVersion(TlsVersion.forJavaName(tlsVersionsArray.getString(i)));
                 }
             }
-            config.setAcceptedTlsVersions(tlsVersions);
-        } else {
-            config.setAcceptedTlsVersions(null);
         }
+
+        builder.forceUsageOfTlsVersions(jsonObject.optBoolean("force_usage_of_tls_versions", false));
 
         // Set the TLS cipher suites if any
-
-        if (obj.has("tls_cipher_suites")) {
-            List<CipherSuite> tlsCipherSuites = new ArrayList<>();
-            JSONArray tlsCipherSuitesArray = obj.optJSONArray("tls_cipher_suites");
+        if (jsonObject.has("tls_cipher_suites")) {
+            JSONArray tlsCipherSuitesArray = jsonObject.optJSONArray("tls_cipher_suites");
             if (tlsCipherSuitesArray != null) {
                 for (int i = 0; i < tlsCipherSuitesArray.length(); i++) {
-                    tlsCipherSuites.add(CipherSuite.forJavaName(tlsCipherSuitesArray.getString(i)));
+                    builder.addAcceptedTlsCipherSuite(CipherSuite.forJavaName(tlsCipherSuitesArray.getString(i)));
                 }
             }
-            config.setAcceptedTlsCipherSuites(tlsCipherSuites);
-        } else {
-            config.setAcceptedTlsCipherSuites(null);
         }
 
-        return config;
+        return builder.build();
+    }
+
+    /**
+     * Builder
+     */
+    public static class Builder {
+        private HomeServerConnectionConfig mHomeServerConnectionConfig;
+
+        /**
+         * Builder constructor
+         */
+        public Builder() {
+            mHomeServerConnectionConfig = new HomeServerConnectionConfig();
+        }
+
+        /**
+         * create a Builder from an existing HomeServerConnectionConfig
+         */
+        public Builder(HomeServerConnectionConfig from) {
+            try {
+                mHomeServerConnectionConfig = HomeServerConnectionConfig.fromJson(from.toJson());
+            } catch (JSONException e) {
+                // Should not happen
+                throw new RuntimeException("Unable to create a HomeServerConnectionConfig", e);
+            }
+        }
+
+        /**
+         * @param homeServerUri The URI to use to connect to the homeserver. Cannot be null
+         * @return this builder
+         */
+        public Builder withHomeServerUri(final Uri homeServerUri) {
+            if (homeServerUri == null || (!"http".equals(homeServerUri.getScheme()) && !"https".equals(homeServerUri.getScheme()))) {
+                throw new RuntimeException("Invalid home server URI: " + homeServerUri);
+            }
+
+            // remove trailing /
+            if (homeServerUri.toString().endsWith("/")) {
+                try {
+                    String url = homeServerUri.toString();
+                    mHomeServerConnectionConfig.mHomeServerUri = Uri.parse(url.substring(0, url.length() - 1));
+                } catch (Exception e) {
+                    throw new RuntimeException("Invalid home server URI: " + homeServerUri);
+                }
+            } else {
+                mHomeServerConnectionConfig.mHomeServerUri = homeServerUri;
+            }
+
+            return this;
+        }
+
+        /**
+         * @param identityServerUri The URI to use to manage identity. Can be null
+         * @return this builder
+         */
+        public Builder withIdentityServerUri(@Nullable final Uri identityServerUri) {
+            if ((null != identityServerUri) && (!"http".equals(identityServerUri.getScheme()) && !"https".equals(identityServerUri.getScheme()))) {
+                throw new RuntimeException("Invalid identity server URI: " + identityServerUri);
+            }
+
+            // remove trailing /
+            if ((null != identityServerUri) && identityServerUri.toString().endsWith("/")) {
+                try {
+                    String url = identityServerUri.toString();
+                    mHomeServerConnectionConfig.mIdentityServerUri = Uri.parse(url.substring(0, url.length() - 1));
+                } catch (Exception e) {
+                    throw new RuntimeException("Invalid identity server URI: " + identityServerUri);
+                }
+            } else {
+                mHomeServerConnectionConfig.mIdentityServerUri = identityServerUri;
+            }
+
+            return this;
+        }
+
+        /**
+         * @param credentials The credentials to use, if needed. Can be null.
+         * @return this builder
+         */
+        public Builder withCredentials(@Nullable Credentials credentials) {
+            mHomeServerConnectionConfig.mCredentials = credentials;
+            return this;
+        }
+
+        /**
+         * @param allowedFingerprint If using SSL, allow server certs that match this fingerprint.
+         * @return this builder
+         */
+        public Builder addAllowedFingerPrint(@Nullable Fingerprint allowedFingerprint) {
+            if (allowedFingerprint != null) {
+                mHomeServerConnectionConfig.mAllowedFingerprints.add(allowedFingerprint);
+            }
+
+            return this;
+        }
+
+        /**
+         * @param pin If true only allow certs matching given fingerprints, otherwise fallback to
+         *            standard X509 checks.
+         * @return this builder
+         */
+        public Builder withPin(boolean pin) {
+            mHomeServerConnectionConfig.mPin = pin;
+
+            return this;
+        }
+
+        /**
+         * @param shouldAcceptTlsExtension
+         * @return this builder
+         */
+        public Builder withShouldAcceptTlsExtensions(boolean shouldAcceptTlsExtension) {
+            mHomeServerConnectionConfig.mShouldAcceptTlsExtensions = shouldAcceptTlsExtension;
+
+            return this;
+        }
+
+        /**
+         * Add an accepted TLS version for TLS connections with the home server.
+         *
+         * @param tlsVersion the tls version to add to the set of TLS versions accepted.
+         * @return this builder
+         */
+        public Builder addAcceptedTlsVersion(@NonNull TlsVersion tlsVersion) {
+            if (mHomeServerConnectionConfig.mTlsVersions == null) {
+                mHomeServerConnectionConfig.mTlsVersions = new ArrayList<>();
+            }
+
+            mHomeServerConnectionConfig.mTlsVersions.add(tlsVersion);
+
+            return this;
+        }
+
+        /**
+         * Force the usage of TlsVersion. This can be usefull for device on Android version < 20
+         *
+         * @param forceUsageOfTlsVersions set to true to force the usage of specified TlsVersions (with {@link #addAcceptedTlsVersion(TlsVersion)}
+         * @return this builder
+         */
+        public Builder forceUsageOfTlsVersions(boolean forceUsageOfTlsVersions) {
+            mHomeServerConnectionConfig.mForceUsageTlsVersions = forceUsageOfTlsVersions;
+
+            return this;
+        }
+
+        /**
+         * Add a TLS cipher suite to the list of accepted TLS connections with the home server.
+         *
+         * @param tlsCipherSuite the tls cipher suite to add.
+         * @return this builder
+         */
+        public Builder addAcceptedTlsCipherSuite(@NonNull CipherSuite tlsCipherSuite) {
+            if (mHomeServerConnectionConfig.mTlsCipherSuites == null) {
+                mHomeServerConnectionConfig.mTlsCipherSuites = new ArrayList<>();
+            }
+
+            mHomeServerConnectionConfig.mTlsCipherSuites.add(tlsCipherSuite);
+
+            return this;
+        }
+
+        /**
+         * Update the anti-virus server URI.
+         *
+         * @param antivirusServerUri the new anti-virus uri. Can be null
+         * @return this builder
+         */
+        public Builder withAntiVirusServerUri(@Nullable Uri antivirusServerUri) {
+            if ((null != antivirusServerUri) && (!"http".equals(antivirusServerUri.getScheme()) && !"https".equals(antivirusServerUri.getScheme()))) {
+                throw new RuntimeException("Invalid antivirus server URI: " + antivirusServerUri);
+            }
+
+            mHomeServerConnectionConfig.mAntiVirusServerUri = antivirusServerUri;
+
+            return this;
+        }
+
+        /**
+         * Convenient method to limit the TLS versions and cipher suites for this Builder
+         * Ref:
+         * - https://www.ssi.gouv.fr/uploads/2017/02/security-recommendations-for-tls_v1.1.pdf
+         * - https://developer.android.com/reference/javax/net/ssl/SSLEngine
+         *
+         * @param tlsLimitations          true to use Tls limitations
+         * @param enableCompatibilityMode set to true for Android < 20
+         * @return this builder
+         */
+        public Builder withTlsLimitations(boolean tlsLimitations, boolean enableCompatibilityMode) {
+            if (tlsLimitations) {
+                withShouldAcceptTlsExtensions(false);
+
+                // Tls versions
+                addAcceptedTlsVersion(TlsVersion.TLS_1_2);
+                addAcceptedTlsVersion(TlsVersion.TLS_1_3);
+
+                forceUsageOfTlsVersions(enableCompatibilityMode);
+
+                // Cipher suites
+                addAcceptedTlsCipherSuite(CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256);
+                addAcceptedTlsCipherSuite(CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256);
+                addAcceptedTlsCipherSuite(CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+                addAcceptedTlsCipherSuite(CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256);
+                addAcceptedTlsCipherSuite(CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
+                addAcceptedTlsCipherSuite(CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384);
+                addAcceptedTlsCipherSuite(CipherSuite.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256);
+                addAcceptedTlsCipherSuite(CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256);
+
+                if (enableCompatibilityMode) {
+                    // Adopt some preceding cipher suites for Android < 20 to be able to negotiate
+                    // a TLS session.
+                    addAcceptedTlsCipherSuite(CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA);
+                    addAcceptedTlsCipherSuite(CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA);
+                }
+            }
+
+            return this;
+        }
+
+        /**
+         * @return the {@link HomeServerConnectionConfig}
+         */
+        public HomeServerConnectionConfig build() {
+            // Check mandatory parameters
+            if (mHomeServerConnectionConfig.mHomeServerUri == null) {
+                throw new RuntimeException("Home server URI not set");
+            }
+
+            return mHomeServerConnectionConfig;
+        }
+
     }
 
     public static final class CertificatePin {

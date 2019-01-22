@@ -27,6 +27,8 @@ import android.text.TextUtils;
 
 import com.google.gson.Gson;
 
+import org.matrix.androidsdk.interceptors.CurlLoggingInterceptor;
+import org.matrix.androidsdk.interceptors.FormattedJsonHttpLogger;
 import org.matrix.androidsdk.listeners.IMXNetworkEventListener;
 import org.matrix.androidsdk.network.NetworkConnectivityReceiver;
 import org.matrix.androidsdk.rest.model.login.Credentials;
@@ -49,6 +51,7 @@ public class RestClient<T> {
 
     public static final String URI_API_PREFIX_PATH_MEDIA_R0 = "_matrix/media/r0/";
     public static final String URI_API_PREFIX_PATH_MEDIA_PROXY_UNSTABLE = "_matrix/media_proxy/unstable/";
+    public static final String URI_API_PREFIX_PATH = "_matrix/client/";
     public static final String URI_API_PREFIX_PATH_R0 = "_matrix/client/r0/";
     public static final String URI_API_PREFIX_PATH_UNSTABLE = "_matrix/client/unstable/";
 
@@ -70,11 +73,9 @@ public class RestClient<T> {
     private static final int READ_TIMEOUT_MS = 60000;
     private static final int WRITE_TIMEOUT_MS = 60000;
 
-    protected Credentials mCredentials;
+    private Credentials mCredentials;
 
     protected T mApi;
-
-    protected Gson gson;
 
     protected UnsentEventsManager mUnsentEventsManager;
 
@@ -88,6 +89,10 @@ public class RestClient<T> {
 
     // http client
     private OkHttpClient mOkHttpClient = new OkHttpClient();
+
+    public RestClient(HomeServerConnectionConfig hsConfig, Class<T> type, String uriPrefix) {
+        this(hsConfig, type, uriPrefix, JsonUtils.getKotlinGson(), EndPointServer.HOME_SERVER);
+    }
 
     public RestClient(HomeServerConnectionConfig hsConfig, Class<T> type, String uriPrefix, boolean withNullSerialization) {
         this(hsConfig, type, uriPrefix, withNullSerialization, EndPointServer.HOME_SERVER);
@@ -116,9 +121,11 @@ public class RestClient<T> {
      * @param endPointServer        tell which server is used to define the base url
      */
     public RestClient(HomeServerConnectionConfig hsConfig, Class<T> type, String uriPrefix, boolean withNullSerialization, EndPointServer endPointServer) {
-        // The JSON -> object mapper
-        gson = JsonUtils.getGson(withNullSerialization);
+        this(hsConfig, type, uriPrefix, JsonUtils.getGson(withNullSerialization), endPointServer);
+    }
 
+    // Private constructor with Gson instance as a parameter
+    private RestClient(HomeServerConnectionConfig hsConfig, Class<T> type, String uriPrefix, Gson gson, EndPointServer endPointServer) {
         mHsConfig = hsConfig;
         mCredentials = hsConfig.getCredentials();
 
@@ -183,9 +190,11 @@ public class RestClient<T> {
      * Create an user agent with the application version.
      * Ex: Riot/0.8.12 (Linux; U; Android 6.0.1; SM-A510F Build/MMB29; Flavour FDroid; MatrixAndroidSDK 0.9.6)
      *
-     * @param appContext the application context
+     * @param appContext        the application context
+     * @param flavorDescription the flavor description
      */
-    public static void initUserAgent(Context appContext) {
+    public static void initUserAgent(@Nullable Context appContext,
+                                     @NonNull String flavorDescription) {
         String appName = "";
         String appVersion = "";
 
@@ -213,14 +222,14 @@ public class RestClient<T> {
         }
 
         // if there is no user agent or cannot parse it
-        if ((null == sUserAgent) || (sUserAgent.lastIndexOf(")") == -1) || (sUserAgent.indexOf("(") == -1)) {
-            sUserAgent = appName + "/" + appVersion + " ( Flavour " + appContext.getString(R.string.flavor_description)
+        if ((null == sUserAgent) || (sUserAgent.lastIndexOf(")") == -1) || !sUserAgent.contains("(")) {
+            sUserAgent = appName + "/" + appVersion + " ( Flavour " + flavorDescription
                     + "; MatrixAndroidSDK " + BuildConfig.VERSION_NAME + ")";
         } else {
             // update
             sUserAgent = appName + "/" + appVersion + " " +
                     sUserAgent.substring(sUserAgent.indexOf("("), sUserAgent.lastIndexOf(")") - 1) +
-                    "; Flavour " + appContext.getString(R.string.flavor_description) +
+                    "; Flavour " + flavorDescription +
                     "; MatrixAndroidSDK " + BuildConfig.VERSION_NAME + ")";
         }
     }
@@ -259,6 +268,7 @@ public class RestClient<T> {
             Log.d(LOG_TAG, "## refreshConnectionTimeout()  : update the requests timeout to 1 ms");
         }
 
+        // FIXME It has no effect to the rest client
         mOkHttpClient = builder.build();
     }
 
@@ -283,6 +293,7 @@ public class RestClient<T> {
         }
 
         if (timeoutMs != mOkHttpClient.connectTimeoutMillis()) {
+            // FIXME It has no effect to the rest client
             mOkHttpClient = mOkHttpClient.newBuilder().connectTimeout(timeoutMs, TimeUnit.MILLISECONDS).build();
         }
     }
@@ -323,20 +334,5 @@ public class RestClient<T> {
      */
     public void setCredentials(Credentials credentials) {
         mCredentials = credentials;
-    }
-
-    /**
-     * Default protected constructor for unit tests.
-     */
-    protected RestClient() {
-    }
-
-    /**
-     * Protected setter for injection by unit tests.
-     *
-     * @param api the api object
-     */
-    protected void setApi(T api) {
-        mApi = api;
     }
 }

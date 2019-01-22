@@ -20,6 +20,7 @@ package org.matrix.androidsdk.data.cryptostore;
 
 import android.content.Context;
 import android.os.Looper;
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import org.matrix.androidsdk.crypto.IncomingRoomKeyRequest;
@@ -27,6 +28,7 @@ import org.matrix.androidsdk.crypto.OutgoingRoomKeyRequest;
 import org.matrix.androidsdk.crypto.data.MXDeviceInfo;
 import org.matrix.androidsdk.crypto.data.MXOlmInboundGroupSession;
 import org.matrix.androidsdk.crypto.data.MXOlmInboundGroupSession2;
+import org.matrix.androidsdk.crypto.data.MXOlmSession;
 import org.matrix.androidsdk.crypto.data.MXUsersDevicesMap;
 import org.matrix.androidsdk.rest.model.login.Credentials;
 import org.matrix.androidsdk.util.CompatUtil;
@@ -38,8 +40,10 @@ import org.matrix.olm.OlmSession;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -51,7 +55,10 @@ import java.util.zip.GZIPOutputStream;
 
 /**
  * the crypto data store
+ *
+ * @deprecated use RealmCryptoStore now. The MXFileCryptoStore does not support Keys Backup.
  */
+@Deprecated
 public class MXFileCryptoStore implements IMXCryptoStore {
     private static final String LOG_TAG = MXFileCryptoStore.class.getSimpleName();
 
@@ -162,7 +169,18 @@ public class MXFileCryptoStore implements IMXCryptoStore {
     // tell if the store is ready
     private boolean mIsReady = false;
 
-    public MXFileCryptoStore() {
+    private Context mContext;
+
+    // True if file encryption is enabled
+    private final boolean mEnableFileEncryption;
+
+    /**
+     * Constructor
+     *
+     * @param enableFileEncryption set to true to enable file encryption.
+     */
+    public MXFileCryptoStore(boolean enableFileEncryption) {
+        mEnableFileEncryption = enableFileEncryption;
     }
 
     @Override
@@ -216,6 +234,8 @@ public class MXFileCryptoStore implements IMXCryptoStore {
         mTrackingStatuses = new HashMap<>();
         mOlmSessions = new HashMap<>();
         mInboundGroupSessions = new HashMap<>();
+
+        mContext = context;
     }
 
     @Override
@@ -227,8 +247,8 @@ public class MXFileCryptoStore implements IMXCryptoStore {
             loadMetaData();
 
             if (null != mMetaData) {
-                result = TextUtils.isEmpty(mMetaData.mDeviceId) ||
-                        TextUtils.equals(mCredentials.deviceId, mMetaData.mDeviceId);
+                result = TextUtils.isEmpty(mMetaData.mDeviceId)
+                        || TextUtils.equals(mCredentials.deviceId, mMetaData.mDeviceId);
             }
         }
 
@@ -272,9 +292,8 @@ public class MXFileCryptoStore implements IMXCryptoStore {
             // Check credentials
             // The device id may not have been provided in credentials.
             // Check it only if provided, else trust the stored one.
-            else if (!TextUtils.equals(mMetaData.mUserId, mCredentials.userId) ||
-                    ((null != mCredentials.deviceId) && !TextUtils.equals(mCredentials.deviceId, mMetaData.mDeviceId))
-                    ) {
+            else if (!TextUtils.equals(mMetaData.mUserId, mCredentials.userId)
+                    || ((null != mCredentials.deviceId) && !TextUtils.equals(mCredentials.deviceId, mMetaData.mDeviceId))) {
                 Log.e(LOG_TAG, "## open() : Credentials do not match");
                 resetData();
             }
@@ -381,14 +400,22 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 }
 
                 FileOutputStream fos = new FileOutputStream(file);
-                GZIPOutputStream gz = CompatUtil.createGzipOutputStream(fos);
+                OutputStream cos;
+                if (mEnableFileEncryption) {
+                    cos = CompatUtil.createCipherOutputStream(fos, mContext);
+                } else {
+                    cos = fos;
+                }
+                GZIPOutputStream gz = CompatUtil.createGzipOutputStream(cos);
                 ObjectOutputStream out = new ObjectOutputStream(gz);
 
                 out.writeObject(object);
+                out.flush();
                 out.close();
 
                 succeed = true;
                 Log.d(LOG_TAG, "## storeObject () : " + description + " done in " + (System.currentTimeMillis() - t0) + " ms");
+
             } catch (OutOfMemoryError oom) {
                 Log.e(LOG_TAG, "storeObject failed : " + description + " -- " + oom.getMessage(), oom);
             } catch (Exception e) {
@@ -550,6 +577,13 @@ public class MXFileCryptoStore implements IMXCryptoStore {
     }
 
     @Override
+    @Nullable
+    public MXDeviceInfo deviceWithIdentityKey(String identityKey) {
+        // No op
+        return null;
+    }
+
+    @Override
     public void storeUserDevices(String userId, Map<String, MXDeviceInfo> devices) {
         if (!mIsReady) {
             Log.e(LOG_TAG, "## storeUserDevices() : the store is not ready");
@@ -694,8 +728,9 @@ public class MXFileCryptoStore implements IMXCryptoStore {
         saveDeviceTrackingStatuses();
     }
 
+    // Note: we keep this code for Unit test only.
     @Override
-    public void storeSession(final OlmSession olmSession, final String deviceKey) {
+    public void storeSession(final MXOlmSession olmSession, final String deviceKey) {
         if (!mIsReady) {
             Log.e(LOG_TAG, "## storeSession() : the store is not ready");
             return;
@@ -705,7 +740,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
 
         if (null != olmSession) {
             try {
-                sessionIdentifier = olmSession.sessionIdentifier();
+                sessionIdentifier = olmSession.getOlmSession().sessionIdentifier();
             } catch (Exception e) {
                 Log.e(LOG_TAG, "## storeSession : session.sessionIdentifier() failed " + e.getMessage(), e);
             }
@@ -720,11 +755,11 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 OlmSession prevOlmSession = mOlmSessions.get(deviceKey).get(sessionIdentifier);
 
                 // test if the session is a new one
-                if (olmSession != prevOlmSession) {
+                if (olmSession.getOlmSession() != prevOlmSession) {
                     if (null != prevOlmSession) {
                         prevOlmSession.releaseSession();
                     }
-                    mOlmSessions.get(deviceKey).put(sessionIdentifier, olmSession);
+                    mOlmSessions.get(deviceKey).put(sessionIdentifier, olmSession.getOlmSession());
                 }
             }
 
@@ -734,12 +769,13 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 keyFolder.mkdir();
             }
 
-            storeObject(olmSession, keyFolder, encodeFilename(sessionIdentifier), "Store olm session " + deviceKey + " " + sessionIdentifier);
+            storeObject(olmSession.getOlmSession(), keyFolder, encodeFilename(sessionIdentifier), "Store olm session " + deviceKey + " " + sessionIdentifier);
         }
     }
 
+    @Nullable
     @Override
-    public Map<String, OlmSession> getDeviceSessions(String deviceKey) {
+    public Set<String> getDeviceSessionIds(String deviceKey) {
         if (!mIsReady) {
             Log.e(LOG_TAG, "## storeSession() : the store is not ready");
             return null;
@@ -752,9 +788,25 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 map = mOlmSessions.get(deviceKey);
             }
 
-            return map;
+            if (map != null) {
+                return map.keySet();
+            }
         }
 
+        return null;
+    }
+
+    @Nullable
+    @Override
+    public MXOlmSession getDeviceSession(String sessionId, String deviceKey) {
+        // No op
+        return null;
+    }
+
+    @Nullable
+    @Override
+    public String getLastUsedSessionId(String deviceKey) {
+        // No op
         return null;
     }
 
@@ -883,6 +935,27 @@ public class MXFileCryptoStore implements IMXCryptoStore {
     }
 
     @Override
+    public void resetBackupMarkers() {
+        // No op
+    }
+
+    @Override
+    public void markBackupDoneForInboundGroupSessionWithId(String sessionId, String senderKey) {
+        // No op
+    }
+
+    @Override
+    public List<MXOlmInboundGroupSession2> inboundGroupSessionsToBackup(int limit) {
+        // No op
+        return new ArrayList<>();
+    }
+
+    @Override
+    public int inboundGroupSessionsCount(boolean onlyBackedUp) {
+        return 0;
+    }
+
+    @Override
     public void close() {
         // release JNI objects
         List<OlmSession> olmSessions = new ArrayList<>();
@@ -956,6 +1029,18 @@ public class MXFileCryptoStore implements IMXCryptoStore {
         } else {
             return new ArrayList<>(mMetaData.mBlacklistUnverifiedDevicesRoomIdsList);
         }
+    }
+
+    @Override
+    public void setKeyBackupVersion(@Nullable String keyBackupVersion) {
+        // No op
+    }
+
+    @Nullable
+    @Override
+    public String getKeyBackupVersion() {
+        // No op
+        return null;
     }
 
     /**
@@ -1110,8 +1195,23 @@ public class MXFileCryptoStore implements IMXCryptoStore {
             try {
                 // the files are now zipped to reduce saving time
                 FileInputStream fis = new FileInputStream(file);
-                GZIPInputStream gz = new GZIPInputStream(fis);
+                InputStream cis;
+                if (mEnableFileEncryption) {
+                    cis = CompatUtil.createCipherInputStream(fis, mContext);
+
+                    if (cis == null) {
+                        // fallback to unencrypted stream for backward compatibility
+                        Log.i(LOG_TAG, "## loadObject() : failed to read encrypted, fallback to unencrypted read");
+                        fis.close();
+                        cis = new FileInputStream(file);
+                    }
+                } else {
+                    cis = fis;
+                }
+
+                GZIPInputStream gz = new GZIPInputStream(cis);
                 ObjectInputStream ois = new ObjectInputStream(gz);
+
                 object = ois.readObject();
                 ois.close();
             } catch (Exception e) {
@@ -1123,7 +1223,7 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                     ObjectInputStream out = new ObjectInputStream(fis2);
 
                     object = out.readObject();
-                    fis2.close();
+                    out.close();
                 } catch (Exception subEx) {
                     // warn that some file loading fails
                     mIsCorrupted = true;
@@ -1535,10 +1635,10 @@ public class MXFileCryptoStore implements IMXCryptoStore {
      * @return true if it is valid
      */
     private boolean isValidIncomingRoomKeyRequest(IncomingRoomKeyRequest incomingRoomKeyRequest) {
-        return (null != incomingRoomKeyRequest) &&
-                !TextUtils.isEmpty(incomingRoomKeyRequest.mUserId) &&
-                !TextUtils.isEmpty(incomingRoomKeyRequest.mDeviceId) &&
-                !TextUtils.isEmpty(incomingRoomKeyRequest.mRequestId);
+        return (null != incomingRoomKeyRequest)
+                && !TextUtils.isEmpty(incomingRoomKeyRequest.mUserId)
+                && !TextUtils.isEmpty(incomingRoomKeyRequest.mDeviceId)
+                && !TextUtils.isEmpty(incomingRoomKeyRequest.mRequestId);
     }
 
     @Override
@@ -1611,8 +1711,8 @@ public class MXFileCryptoStore implements IMXCryptoStore {
         loadIncomingRoomKeyRequests();
 
         // invalid or already stored
-        if (!isValidIncomingRoomKeyRequest(incomingRoomKeyRequest) ||
-                (null != getIncomingRoomKeyRequest(incomingRoomKeyRequest.mUserId, incomingRoomKeyRequest.mDeviceId, incomingRoomKeyRequest.mRequestId))) {
+        if (!isValidIncomingRoomKeyRequest(incomingRoomKeyRequest)
+                || (null != getIncomingRoomKeyRequest(incomingRoomKeyRequest.mUserId, incomingRoomKeyRequest.mDeviceId, incomingRoomKeyRequest.mRequestId))) {
             return;
         }
 
@@ -1707,5 +1807,35 @@ public class MXFileCryptoStore implements IMXCryptoStore {
                 addIncomingRoomKeyRequest(request);
             }
         }
+    }
+
+    /* ==========================================================================================
+     * Accessors for the Realm importation
+     * ========================================================================================== */
+
+    public Map<String, String> getRoomsAlgorithms() {
+        return mRoomsAlgorithms;
+    }
+
+    public MXUsersDevicesMap<MXDeviceInfo> getAllUsersDevices() {
+        // Ensure all users are loaded in the map
+        String[] devices = mDevicesFolder.list();
+
+        if (null != devices) {
+            // Load all
+            for (String device : devices) {
+                loadUserDevices(device);
+            }
+        }
+
+        return mUsersDevicesInfoMap;
+    }
+
+    public Map<Map<String, String>, OutgoingRoomKeyRequest> getOutgoingRoomKeyRequests() {
+        return mOutgoingRoomKeyRequests;
+    }
+
+    public Map<String, Map<String, OlmSession>> getOlmSessions() {
+        return mOlmSessions;
     }
 }

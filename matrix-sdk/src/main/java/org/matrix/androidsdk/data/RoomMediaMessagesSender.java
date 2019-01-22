@@ -32,7 +32,7 @@ import android.util.Pair;
 import org.matrix.androidsdk.MXDataHandler;
 import org.matrix.androidsdk.R;
 import org.matrix.androidsdk.crypto.MXEncryptedAttachments;
-import org.matrix.androidsdk.db.MXMediasCache;
+import org.matrix.androidsdk.db.MXMediaCache;
 import org.matrix.androidsdk.listeners.MXMediaUploadListener;
 import org.matrix.androidsdk.rest.callback.ApiCallback;
 import org.matrix.androidsdk.rest.model.Event;
@@ -56,6 +56,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * Room helper to send media messages in the right order.
@@ -86,6 +87,9 @@ class RoomMediaMessagesSender {
 
     // encoding creation threads
     private static android.os.Handler mEncodingHandler = null;
+
+    // Pattern to strip previous reply when replying to a message. It also matches multi lines previous reply, when for instance containing blockquote.
+    private static Pattern sPreviousReplyPattern = Pattern.compile("^<mx-reply>.*</mx-reply>", Pattern.DOTALL);
 
     /**
      * Constructor
@@ -229,8 +233,8 @@ class RoomMediaMessagesSender {
             roomMediaMessage = mSendingRoomMediaMessage;
         }
 
-        // upload the medias first
-        if (uploadMedias(roomMediaMessage)) {
+        // upload the media first
+        if (uploadMedia(roomMediaMessage)) {
             return;
         }
 
@@ -239,7 +243,7 @@ class RoomMediaMessagesSender {
     }
 
     /**
-     * Send the event after uploading the medias
+     * Send the event after uploading the media
      *
      * @param event the event to send
      */
@@ -514,7 +518,7 @@ class RoomMediaMessagesSender {
                                                  boolean isEmote) {
         if (stripPreviousReplyTo) {
             // Strip replyToFormattedBody from previous reply to
-            replyToFormattedBody = replyToFormattedBody.replaceAll("^<mx-reply>.*</mx-reply>", "");
+            replyToFormattedBody = sPreviousReplyPattern.matcher(replyToFormattedBody).replaceAll("");
         }
 
         StringBuilder ret = new StringBuilder("<mx-reply><blockquote><a href=\"")
@@ -558,12 +562,12 @@ class RoomMediaMessagesSender {
     }
 
     /**
-     * Retrieves the image thumbnail saved by the medias picker.
+     * Retrieves the image thumbnail saved by the media picker.
      *
      * @param sharedDataItem the sharedItem
      * @return the thumbnail if it exits.
      */
-    private Bitmap getMediasPickerThumbnail(RoomMediaMessage sharedDataItem) {
+    private Bitmap getMediaPickerThumbnail(RoomMediaMessage sharedDataItem) {
         Bitmap thumbnailBitmap = null;
 
         try {
@@ -579,9 +583,9 @@ class RoomMediaMessagesSender {
                 }
             }
         } catch (Exception e) {
-            Log.e(LOG_TAG, "cannot restore the medias picker thumbnail " + e.getMessage(), e);
+            Log.e(LOG_TAG, "cannot restore the media picker thumbnail " + e.getMessage(), e);
         } catch (OutOfMemoryError oom) {
-            Log.e(LOG_TAG, "cannot restore the medias picker thumbnail oom", oom);
+            Log.e(LOG_TAG, "cannot restore the media picker thumbnail oom", oom);
         }
 
         return thumbnailBitmap;
@@ -597,12 +601,12 @@ class RoomMediaMessagesSender {
         String mediaUrl = roomMediaMessage.getUri().toString();
 
         if (!mediaUrl.startsWith("file:")) {
-            // save the content:// file in to the medias cache
+            // save the content:// file in to the media cache
             String mimeType = roomMediaMessage.getMimeType(mContext);
             ResourceUtils.Resource resource = ResourceUtils.openResource(mContext, roomMediaMessage.getUri(), mimeType);
 
             // save the file in the filesystem
-            mediaUrl = mDataHandler.getMediasCache().saveMedia(resource.mContentStream, null, mimeType);
+            mediaUrl = mDataHandler.getMediaCache().saveMedia(resource.mContentStream, null, mimeType);
             resource.close();
         }
 
@@ -618,7 +622,7 @@ class RoomMediaMessagesSender {
     private Message buildImageMessage(RoomMediaMessage roomMediaMessage) {
         try {
             String mimeType = roomMediaMessage.getMimeType(mContext);
-            final MXMediasCache mediasCache = mDataHandler.getMediasCache();
+            final MXMediaCache mediaCache = mDataHandler.getMediaCache();
 
             String mediaUrl = getMediaUrl(roomMediaMessage);
 
@@ -626,7 +630,7 @@ class RoomMediaMessagesSender {
             Bitmap thumbnailBitmap = roomMediaMessage.getFullScreenImageKindThumbnail(mContext);
 
             if (null == thumbnailBitmap) {
-                thumbnailBitmap = getMediasPickerThumbnail(roomMediaMessage);
+                thumbnailBitmap = getMediaPickerThumbnail(roomMediaMessage);
             }
 
             if (null == thumbnailBitmap) {
@@ -641,7 +645,7 @@ class RoomMediaMessagesSender {
             String thumbnailURL = null;
 
             if (null != thumbnailBitmap) {
-                thumbnailURL = mediasCache.saveBitmap(thumbnailBitmap, null);
+                thumbnailURL = mediaCache.saveBitmap(thumbnailBitmap, null);
             }
 
             // get the exif rotation angle
@@ -649,7 +653,7 @@ class RoomMediaMessagesSender {
 
             if (0 != rotationAngle) {
                 // always apply the rotation to the image
-                ImageUtils.rotateImage(mContext, thumbnailURL, rotationAngle, mediasCache);
+                ImageUtils.rotateImage(mContext, thumbnailURL, rotationAngle, mediaCache);
             }
 
             ImageMessage imageMessage = new ImageMessage();
@@ -691,7 +695,7 @@ class RoomMediaMessagesSender {
         try {
             Uri uri = Uri.parse(videoUrl);
             Bitmap thumb = ThumbnailUtils.createVideoThumbnail(uri.getPath(), MediaStore.Images.Thumbnails.MINI_KIND);
-            thumbUrl = mDataHandler.getMediasCache().saveBitmap(thumb, null);
+            thumbUrl = mDataHandler.getMediaCache().saveBitmap(thumb, null);
         } catch (Exception e) {
             Log.e(LOG_TAG, "## getVideoThumbnailUrl() failed with " + e.getMessage(), e);
         }
@@ -771,16 +775,16 @@ class RoomMediaMessagesSender {
     }
 
     //==============================================================================================================
-    // Upload medias management
+    // Upload media management
     //==============================================================================================================
 
     /**
-     * Upload the medias.
+     * Upload the media.
      *
      * @param roomMediaMessage the roomMediaMessage
      * @return true if a media is uploaded
      */
-    private boolean uploadMedias(final RoomMediaMessage roomMediaMessage) {
+    private boolean uploadMedia(final RoomMediaMessage roomMediaMessage) {
         final Event event = roomMediaMessage.getEvent();
         final Message message = JsonUtils.toMessage(event.getContent());
 
@@ -805,7 +809,7 @@ class RoomMediaMessagesSender {
         mEncodingHandler.post(new Runnable() {
             @Override
             public void run() {
-                final MXMediasCache mediasCache = mDataHandler.getMediasCache();
+                final MXMediaCache mediaCache = mDataHandler.getMediaCache();
 
                 Uri uri = Uri.parse(url);
                 String mimeType = fMimeType;
@@ -823,7 +827,7 @@ class RoomMediaMessagesSender {
 
                         if (null != encryptionResult) {
                             mimeType = "application/octet-stream";
-                            encryptedUri = Uri.parse(mediasCache.saveMedia(encryptionResult.mEncryptedStream, null, fMimeType));
+                            encryptedUri = Uri.parse(mediaCache.saveMedia(encryptionResult.mEncryptedStream, null, fMimeType));
                             File file = new File(encryptedUri.getPath());
                             stream = new FileInputStream(file);
                         } else {
@@ -832,7 +836,7 @@ class RoomMediaMessagesSender {
                             mUiHandler.post(new Runnable() {
                                 @Override
                                 public void run() {
-                                    mDataHandler.updateEventState(roomMediaMessage.getEvent(), Event.SentState.UNDELIVERABLE);
+                                    mDataHandler.updateEventState(roomMediaMessage.getEvent(), Event.SentState.UNDELIVERED);
                                     mRoom.storeOutgoingEvent(roomMediaMessage.getEvent());
                                     mDataHandler.getStore().commit();
 
@@ -855,7 +859,7 @@ class RoomMediaMessagesSender {
 
                 mDataHandler.updateEventState(roomMediaMessage.getEvent(), Event.SentState.SENDING);
 
-                mediasCache.uploadContent(stream, filename, mimeType, url,
+                mediaCache.uploadContent(stream, filename, mimeType, url,
                         new MXMediaUploadListener() {
                             @Override
                             public void onUploadStart(final String uploadId) {
@@ -874,7 +878,7 @@ class RoomMediaMessagesSender {
                                 mUiHandler.post(new Runnable() {
                                     @Override
                                     public void run() {
-                                        mDataHandler.updateEventState(roomMediaMessage.getEvent(), Event.SentState.UNDELIVERABLE);
+                                        mDataHandler.updateEventState(roomMediaMessage.getEvent(), Event.SentState.UNDELIVERED);
 
                                         if (null != roomMediaMessage.getMediaUploadListener()) {
                                             roomMediaMessage.getMediaUploadListener().onUploadCancel(uploadId);
@@ -892,7 +896,7 @@ class RoomMediaMessagesSender {
                                 mUiHandler.post(new Runnable() {
                                     @Override
                                     public void run() {
-                                        mDataHandler.updateEventState(roomMediaMessage.getEvent(), Event.SentState.UNDELIVERABLE);
+                                        mDataHandler.updateEventState(roomMediaMessage.getEvent(), Event.SentState.UNDELIVERED);
 
                                         if (null != roomMediaMessage.getMediaUploadListener()) {
                                             roomMediaMessage.getMediaUploadListener().onUploadError(uploadId, serverResponseCode, serverErrorMessage);
@@ -916,7 +920,7 @@ class RoomMediaMessagesSender {
                                             mediaMessage.setThumbnailUrl(encryptionResult, contentUri);
 
                                             if (null != encryptionResult) {
-                                                mediasCache.saveFileMediaForUrl(contentUri, encryptedUri.toString(), -1, -1, "image/jpeg");
+                                                mediaCache.saveFileMediaForUrl(contentUri, encryptedUri.toString(), -1, -1, "image/jpeg");
                                                 try {
                                                     new File(Uri.parse(url).getPath()).delete();
                                                 } catch (Exception e) {
@@ -924,7 +928,7 @@ class RoomMediaMessagesSender {
                                                 }
                                             } else {
                                                 Pair<Integer, Integer> thumbnailSize = roomMediaMessage.getThumbnailSize();
-                                                mediasCache.saveFileMediaForUrl(contentUri, url, thumbnailSize.first, thumbnailSize.second, "image/jpeg");
+                                                mediaCache.saveFileMediaForUrl(contentUri, url, thumbnailSize.first, thumbnailSize.second, "image/jpeg");
                                             }
 
                                             // update the event content with the new message info
@@ -935,11 +939,11 @@ class RoomMediaMessagesSender {
                                             mDataHandler.getStore().flushRoomEvents(mRoom.getRoomId());
 
                                             // upload the media
-                                            uploadMedias(roomMediaMessage);
+                                            uploadMedia(roomMediaMessage);
                                         } else {
                                             if (null != encryptedUri) {
                                                 // replace the thumbnail and the media contents by the computed one
-                                                mediasCache.saveFileMediaForUrl(contentUri, encryptedUri.toString(), mediaMessage.getMimeType());
+                                                mediaCache.saveFileMediaForUrl(contentUri, encryptedUri.toString(), mediaMessage.getMimeType());
                                                 try {
                                                     new File(Uri.parse(url).getPath()).delete();
                                                 } catch (Exception e) {
@@ -947,7 +951,7 @@ class RoomMediaMessagesSender {
                                                 }
                                             } else {
                                                 // replace the thumbnail and the media contents by the computed one
-                                                mediasCache.saveFileMediaForUrl(contentUri, url, mediaMessage.getMimeType());
+                                                mediaCache.saveFileMediaForUrl(contentUri, url, mediaMessage.getMimeType());
                                             }
                                             mediaMessage.setUrl(encryptionResult, contentUri);
 

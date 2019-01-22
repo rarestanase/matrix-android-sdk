@@ -20,23 +20,26 @@ package org.matrix.androidsdk.data.store;
 
 import android.content.Context;
 import android.os.HandlerThread;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import org.matrix.androidsdk.HomeServerConnectionConfig;
-import org.matrix.androidsdk.data.EventTimeline;
+import org.matrix.androidsdk.MXDataHandler;
 import org.matrix.androidsdk.data.Room;
 import org.matrix.androidsdk.data.RoomAccountData;
 import org.matrix.androidsdk.data.RoomState;
 import org.matrix.androidsdk.data.RoomSummary;
+import org.matrix.androidsdk.data.timeline.EventTimeline;
 import org.matrix.androidsdk.rest.callback.ApiCallback;
 import org.matrix.androidsdk.rest.model.Event;
 import org.matrix.androidsdk.rest.model.ReceiptData;
 import org.matrix.androidsdk.rest.model.RoomMember;
-import org.matrix.androidsdk.rest.model.TokensChunkResponse;
+import org.matrix.androidsdk.rest.model.TokensChunkEvents;
 import org.matrix.androidsdk.rest.model.User;
 import org.matrix.androidsdk.rest.model.group.Group;
 import org.matrix.androidsdk.rest.model.pid.ThirdPartyIdentifier;
+import org.matrix.androidsdk.rest.model.sync.AccountData;
 import org.matrix.androidsdk.util.CompatUtil;
 import org.matrix.androidsdk.util.ContentUtils;
 import org.matrix.androidsdk.util.Log;
@@ -45,8 +48,10 @@ import org.matrix.androidsdk.util.MXOsHandler;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -72,6 +77,7 @@ public class MXFileStore extends MXMemoryStore {
 
     private static final String MXFILE_STORE_FOLDER = "MXFileStore";
     private static final String MXFILE_STORE_METADATA_FILE_NAME = "MXFileStore";
+    private static final String MXFILE_STORE_ACCOUNT_DATA_FILE_NAME = "MXAccountData";
 
     private static final String MXFILE_STORE_GZ_ROOMS_MESSAGES_FOLDER = "messages_gz";
     private static final String MXFILE_STORE_ROOMS_TOKENS_FOLDER = "tokens";
@@ -139,6 +145,12 @@ public class MXFileStore extends MXMemoryStore {
 
     // store some stats
     private final Map<String, Long> mStoreStats = new HashMap<>();
+
+    // True if file encryption is enabled
+    private final boolean mEnableFileEncryption;
+
+    // The dataHandler
+    private MXDataHandler mMXDataHandler;
 
     /**
      * Create the file store dirtrees
@@ -210,14 +222,18 @@ public class MXFileStore extends MXMemoryStore {
     }
 
     /**
-     * Default constructor
+     * Constructor
      *
-     * @param hsConfig the expected credentials
-     * @param context  the context.
+     * @param hsConfig             the expected credentials
+     * @param enableFileEncryption set to true to enable file encryption.
+     * @param context              the context.
      */
-    public MXFileStore(HomeServerConnectionConfig hsConfig, Context context) {
-        initCommon();
+    public MXFileStore(HomeServerConnectionConfig hsConfig,
+                       boolean enableFileEncryption,
+                       Context context) {
         setContext(context);
+
+        mEnableFileEncryption = enableFileEncryption;
 
         mIsReady = false;
         mCredentials = hsConfig.getCredentials();
@@ -266,6 +282,10 @@ public class MXFileStore extends MXMemoryStore {
             mIsReady = true;
             mAreReceiptsReady = true;
         }
+    }
+
+    public void setDataHandler(@NonNull final MXDataHandler dataHandler) {
+        mMXDataHandler = dataHandler;
     }
 
     /**
@@ -352,7 +372,8 @@ public class MXFileStore extends MXMemoryStore {
                                 Log.e(LOG_TAG, "Open the store in the background thread.");
 
                                 String errorDescription = null;
-                                boolean succeed = (TextUtils.equals(mMetadata.mUserId, mCredentials.userId));
+                                boolean succeed = (mMetadata.mVersion == MXFILE_VERSION)
+                                        && TextUtils.equals(mMetadata.mUserId, mCredentials.userId);
 
                                 if (!succeed) {
                                     errorDescription = "Invalid store content";
@@ -393,7 +414,7 @@ public class MXFileStore extends MXMemoryStore {
                                         Collection<Room> rooms = getRooms();
 
                                         for (Room room : rooms) {
-                                            Collection<RoomMember> members = room.getState().getMembers();
+                                            Collection<RoomMember> members = room.getState().getLoadedMembers();
                                             for (RoomMember member : members) {
                                                 updateUserWithRoomMemberEvent(member);
                                             }
@@ -448,6 +469,17 @@ public class MXFileStore extends MXMemoryStore {
                                     }
                                 }
 
+                                if (succeed) {
+                                    succeed &= loadAccountData();
+
+                                    if (!succeed) {
+                                        errorDescription = "loadAccountData fails";
+                                        Log.e(LOG_TAG, errorDescription);
+                                    } else {
+                                        Log.d(LOG_TAG, "loadAccountData succeeds");
+                                    }
+                                }
+
                                 // do not expect having empty list
                                 // assume that something is corrupted
                                 if (!succeed) {
@@ -492,10 +524,12 @@ public class MXFileStore extends MXMemoryStore {
                                         Room room = getRoom(roomId);
 
                                         if ((null != room) && (null != room.getState())) {
-                                            int membersCount = room.getState().getMembers().size();
+                                            int membersCount = room.getState().getLoadedMembers().size();
                                             int eventsCount = mRoomEvents.get(roomId).size();
 
-                                            Log.d(LOG_TAG, " room " + roomId + " : membersCount " + membersCount + " - eventsCount " + eventsCount);
+                                            Log.d(LOG_TAG, " room " + roomId
+                                                    + " : (lazy loaded) membersCount " + membersCount
+                                                    + " - eventsCount " + eventsCount);
                                         }
                                     }
 
@@ -797,7 +831,7 @@ public class MXFileStore extends MXMemoryStore {
     }
 
     @Override
-    public void storeRoomEvents(String roomId, TokensChunkResponse<Event> eventsResponse, EventTimeline.Direction direction) {
+    public void storeRoomEvents(String roomId, TokensChunkEvents tokensChunkEvents, EventTimeline.Direction direction) {
         boolean canStore = true;
 
         // do not flush the room messages file
@@ -814,7 +848,7 @@ public class MXFileStore extends MXMemoryStore {
             }
         }
 
-        super.storeRoomEvents(roomId, eventsResponse, direction);
+        super.storeRoomEvents(roomId, tokensChunkEvents, direction);
 
         if (canStore) {
             mRoomsToCommitForMessages.add(roomId);
@@ -932,6 +966,66 @@ public class MXFileStore extends MXMemoryStore {
         if ((null != summary) && (null != summary.getRoomId()) && !mRoomsToCommitForSummaries.contains(summary.getRoomId())) {
             mRoomsToCommitForSummaries.add(summary.getRoomId());
         }
+    }
+
+    /* ==========================================================================================
+     * AccountData
+     * ========================================================================================== */
+
+    /**
+     * Load the account data from the file system.
+     *
+     * @return true if the operation succeeds.
+     */
+    private boolean loadAccountData() {
+        long start = System.currentTimeMillis();
+
+        // init members
+        mAccountData = null;
+
+        File accountDataFile = new File(mStoreFolderFile, MXFILE_STORE_ACCOUNT_DATA_FILE_NAME);
+
+        if (accountDataFile.exists()) {
+            Object accountDataAsVoid = readObject("loadAccountData", accountDataFile);
+
+            if (null != accountDataAsVoid) {
+                try {
+                    mAccountData = (AccountData) accountDataAsVoid;
+                } catch (Exception e) {
+                    Log.e(LOG_TAG, "## loadAccountData() : is corrupted", e);
+                    return false;
+                }
+            }
+        }
+
+        Log.d(LOG_TAG, "loadAccountData : " + (System.currentTimeMillis() - start) + " ms");
+        return true;
+    }
+
+    /**
+     * flush the metadata info from the file system.
+     */
+    @Override
+    public void storeAccountData(AccountData accountData) {
+        super.storeAccountData(accountData);
+
+        Runnable r = new Runnable() {
+            @Override
+            public void run() {
+                mFileStoreHandler.post(new Runnable() {
+                    public void run() {
+                        if (!mIsKilled) {
+                            long start = System.currentTimeMillis();
+                            writeObject("storeAccountData", new File(mStoreFolderFile, MXFILE_STORE_ACCOUNT_DATA_FILE_NAME), mAccountData);
+                            Log.d(LOG_TAG, "storeAccountData : " + (System.currentTimeMillis() - start) + " ms");
+                        }
+                    }
+                });
+            }
+        };
+
+        Thread t = new Thread(r);
+        t.start();
     }
 
     //================================================================================
@@ -1211,13 +1305,12 @@ public class MXFileStore extends MXMemoryStore {
 
                 // finalizes the deserialization
                 for (Event event : events.values()) {
-                    // if a message was not sent, mark at as UNDELIVERABLE
-                    if ((event.mSentState == Event.SentState.UNDELIVERABLE) ||
-                            (event.mSentState == Event.SentState.UNSENT) ||
-                            (event.mSentState == Event.SentState.SENDING) ||
-                            (event.mSentState == Event.SentState.WAITING_RETRY) ||
-                            (event.mSentState == Event.SentState.ENCRYPTING)) {
-                        event.mSentState = Event.SentState.UNDELIVERABLE;
+                    // if a message was not sent, mark it as UNDELIVERED
+                    if ((event.mSentState == Event.SentState.UNSENT)
+                            || (event.mSentState == Event.SentState.SENDING)
+                            || (event.mSentState == Event.SentState.WAITING_RETRY)
+                            || (event.mSentState == Event.SentState.ENCRYPTING)) {
+                        event.mSentState = Event.SentState.UNDELIVERED;
                         shouldSave = true;
                     }
                 }
@@ -1229,8 +1322,7 @@ public class MXFileStore extends MXMemoryStore {
         // succeeds to extract the message list
         if (null != events) {
             // create the room object
-            Room room = new Room();
-            room.init(this, roomId, null);
+            final Room room = new Room(mMXDataHandler, this, roomId);
             // do not wait that the live state update
             room.setReadyState(true);
             storeRoom(room);
@@ -1346,7 +1438,7 @@ public class MXFileStore extends MXMemoryStore {
 
         } catch (Exception e) {
             succeed = false;
-            Log.e(LOG_TAG, "loadRoomToken failed : " + e.getMessage(), e);
+            Log.e(LOG_TAG, "loadRoomsMessages failed : " + e.getMessage(), e);
         }
 
         return succeed;
@@ -1566,7 +1658,7 @@ public class MXFileStore extends MXMemoryStore {
         if (null != room) {
             long start1 = System.currentTimeMillis();
             writeObject("saveRoomsState " + roomId, roomStateFile, room.getState());
-            Log.d(LOG_TAG, "saveRoomsState " + room.getState().getMembers().size() + " members : " + (System.currentTimeMillis() - start1) + " ms");
+            Log.d(LOG_TAG, "saveRoomsState " + room.getNumberOfMembers() + " members : " + (System.currentTimeMillis() - start1) + " ms");
         } else {
             Log.d(LOG_TAG, "saveRoomsState : delete the room state");
             deleteRoomStateFile(roomId);
@@ -1644,7 +1736,7 @@ public class MXFileStore extends MXMemoryStore {
             }
 
             if (null != liveState) {
-                room.getLiveTimeLine().setState(liveState);
+                room.getTimeline().setState(liveState);
             } else {
                 deleteRoom(roomId);
             }
@@ -1823,8 +1915,8 @@ public class MXFileStore extends MXMemoryStore {
     }
 
     @Override
-    public void storeAccountData(String roomId, RoomAccountData accountData) {
-        super.storeAccountData(roomId, accountData);
+    public void storeRoomAccountData(String roomId, RoomAccountData accountData) {
+        super.storeRoomAccountData(roomId, accountData);
 
         if (null != roomId) {
             Room room = mRooms.get(roomId);
@@ -2299,10 +2391,17 @@ public class MXFileStore extends MXMemoryStore {
         boolean succeed = false;
         try {
             FileOutputStream fos = new FileOutputStream(file);
-            GZIPOutputStream gz = CompatUtil.createGzipOutputStream(fos);
+            OutputStream cos;
+            if (mEnableFileEncryption) {
+                cos = CompatUtil.createCipherOutputStream(fos, mContext);
+            } else {
+                cos = fos;
+            }
+            GZIPOutputStream gz = CompatUtil.createGzipOutputStream(cos);
             ObjectOutputStream out = new ObjectOutputStream(gz);
 
             out.writeObject(object);
+            out.flush();
             out.close();
 
             succeed = true;
@@ -2342,7 +2441,21 @@ public class MXFileStore extends MXMemoryStore {
         Object object = null;
         try {
             FileInputStream fis = new FileInputStream(file);
-            GZIPInputStream gz = new GZIPInputStream(fis);
+            InputStream cis;
+            if (mEnableFileEncryption) {
+                cis = CompatUtil.createCipherInputStream(fis, mContext);
+
+                if (cis == null) {
+                    // fallback to unencrypted stream for backward compatibility
+                    Log.i(LOG_TAG, "## readObject() : failed to read encrypted, fallback to unencrypted read");
+                    fis.close();
+                    cis = new FileInputStream(file);
+                }
+            } else {
+                cis = fis;
+            }
+
+            GZIPInputStream gz = new GZIPInputStream(cis);
             ObjectInputStream ois = new ObjectInputStream(gz);
             object = ois.readObject();
             ois.close();
@@ -2560,6 +2673,12 @@ public class MXFileStore extends MXMemoryStore {
     @Override
     public void setUserWidgets(Map<String, Object> contentDict) {
         super.setUserWidgets(contentDict);
+        mMetaDataHasChanged = true;
+    }
+
+    @Override
+    public void addFilter(String jsonFilter, String filterId) {
+        super.addFilter(jsonFilter, filterId);
         mMetaDataHasChanged = true;
     }
 

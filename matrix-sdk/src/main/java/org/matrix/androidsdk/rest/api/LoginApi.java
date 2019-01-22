@@ -1,5 +1,6 @@
 /*
  * Copyright 2014 OpenMarket Ltd
+ * Copyright 2018 New Vector Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +16,9 @@
  */
 package org.matrix.androidsdk.rest.api;
 
-import com.google.gson.JsonObject;
-
+import org.matrix.androidsdk.RestClient;
+import org.matrix.androidsdk.rest.model.Versions;
+import org.matrix.androidsdk.rest.model.login.Credentials;
 import org.matrix.androidsdk.rest.model.login.LoginFlowResponse;
 import org.matrix.androidsdk.rest.model.login.LoginParams;
 import org.matrix.androidsdk.rest.model.login.RegistrationParams;
@@ -34,7 +36,13 @@ public interface LoginApi {
     /**
      * Get the different login flows supported by the server.
      */
-    @GET("login")
+    @GET(RestClient.URI_API_PREFIX_PATH + "versions")
+    Call<Versions> versions();
+
+    /**
+     * Get the different login flows supported by the server.
+     */
+    @GET(RestClient.URI_API_PREFIX_PATH_R0 + "login")
     Call<LoginFlowResponse> login();
 
     /**
@@ -42,20 +50,20 @@ public interface LoginApi {
      *
      * @param params the registration params
      */
-    @POST("register")
-    Call<JsonObject> register(@Body RegistrationParams params);
+    @POST(RestClient.URI_API_PREFIX_PATH_R0 + "register")
+    Call<Credentials> register(@Body RegistrationParams params);
 
     /**
      * Pass params to the server for the current login phase.
      *
      * @param loginParams the login parameters
      */
-    @POST("login")
-    Call<JsonObject> login(@Body LoginParams loginParams);
+    @POST(RestClient.URI_API_PREFIX_PATH_R0 + "login")
+    Call<Credentials> login(@Body LoginParams loginParams);
 
     /**
      * Invalidate the access token, so that it can no longer be used for authorization.
      */
-    @POST("logout")
-    Call<JsonObject> logout();
+    @POST(RestClient.URI_API_PREFIX_PATH_R0 + "logout")
+    Call<Void> logout();
 }
