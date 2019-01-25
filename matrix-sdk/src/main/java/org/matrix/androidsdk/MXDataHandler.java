@@ -499,12 +499,20 @@ public class MXDataHandler implements IMXEventListener {
         if (isAlive()) {
             mBingRulesManager = bingRulesManager;
 
-            mBingRulesManager.loadRules(new SimpleApiCallback<Void>() {
+            // dirty hack to prevent the MXSession object to start a network request... in its
+            // own constructor !!!
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
                 @Override
-                public void onSuccess(Void info) {
-                    onBingRulesUpdate();
+                public void run() {
+                    mBingRulesManager.loadRules(new SimpleApiCallback<Void>() {
+                        @Override
+                        public void onSuccess(Void info) {
+                            onBingRulesUpdate();
+                        }
+                    });
                 }
             });
+
         }
     }
 
