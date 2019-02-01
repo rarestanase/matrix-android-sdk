@@ -2517,4 +2517,14 @@ public class MXSession {
             return mxSession;
         }
     }
+
+    public void updateAccessToken(String accessToken) {
+        mCredentials.accessToken = accessToken;
+        mDataHandler.getCredentials().accessToken = accessToken;
+    }
+
+    public void updateRefreshToken(String refreshToken) {
+        mCredentials.refreshToken = refreshToken;
+        mDataHandler.getCredentials().refreshToken = refreshToken;
+    }
 }
