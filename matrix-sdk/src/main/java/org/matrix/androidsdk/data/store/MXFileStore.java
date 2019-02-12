@@ -152,6 +152,8 @@ public class MXFileStore extends MXMemoryStore {
     // The dataHandler
     private MXDataHandler mMXDataHandler;
 
+    private EventsSorter mEventsSorter = new EventsSorter();
+
     /**
      * Create the file store dirtrees
      */
@@ -1223,7 +1225,8 @@ public class MXFileStore extends MXMemoryStore {
         if ((null != eventsHash) && (null != token)) {
             long t0 = System.currentTimeMillis();
 
-            LinkedHashMap<String, Event> savedEventsMap = getSavedEventsMap(roomId);
+            LinkedHashMap<String, Event> savedEventsMap =
+                mEventsSorter.sortChronologically(getSavedEventsMap(roomId));
 
             if (!writeObject("saveRoomsMessage " + roomId, new File(mGzStoreRoomsMessagesFolderFile, roomId), savedEventsMap)) {
                 return;
