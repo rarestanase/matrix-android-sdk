@@ -52,6 +52,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -109,6 +110,8 @@ public class MXMemoryStore implements IMXStore {
     protected long mUserDisplayNameTs;
     protected long mUserAvatarUrlTs;
 
+    private EventsSorter mEventsSorter;
+
     /**
      * Initialization method.
      */
@@ -122,6 +125,7 @@ public class MXMemoryStore implements IMXStore {
         mRoomAccountData = new ConcurrentHashMap<>();
         mGroups = new ConcurrentHashMap<>();
         mEventStreamToken = null;
+        mEventsSorter = new EventsSorter();
     }
 
     public MXMemoryStore() {
@@ -644,6 +648,11 @@ public class MXMemoryStore implements IMXStore {
                     // If we don't have any information on this room - a pagination token, namely - we don't store the event but instead
                     // wait for the first pagination request to set things right
                     events.put(event.eventId, event);
+                    if (!isLastEventInRightPlace(events)) {
+                        LinkedHashMap<String, Event> sortedEvents =
+                            mEventsSorter.sortChronologically(events);
+                        mRoomEvents.put(event.roomId, sortedEvents);
+                    }
 
                     if (event.isDummyEvent()) {
                         mTemporaryEventsList.put(event.eventId, event);
@@ -653,6 +662,14 @@ public class MXMemoryStore implements IMXStore {
         } catch (OutOfMemoryError e) {
             dispatchOOM(e);
         }
+    }
+
+    private boolean isLastEventInRightPlace(LinkedHashMap<String, Event> events) {
+        if (events.size() < 2) return true;
+        Entry<String, Event>[] eventsEntries = (Entry<String, Event>[]) events.entrySet().toArray();
+        Entry<String, Event> beforeLastEntry = eventsEntries[events.size() - 2];
+        Entry<String, Event> lastEntry = eventsEntries[events.size() - 1];
+        return lastEntry.getValue().originServerTs >= beforeLastEntry.getValue().originServerTs;
     }
 
     @Override
@@ -810,6 +827,10 @@ public class MXMemoryStore implements IMXStore {
                             mRoomEvents.put(roomId, events2);
                         }
                     }
+                    events = mRoomEvents.get(roomId);
+                    LinkedHashMap<String, Event> sortedEvents =
+                        mEventsSorter.sortChronologically(events);
+                    mRoomEvents.put(roomId, sortedEvents);
                 }
             }
         } catch (OutOfMemoryError e) {
