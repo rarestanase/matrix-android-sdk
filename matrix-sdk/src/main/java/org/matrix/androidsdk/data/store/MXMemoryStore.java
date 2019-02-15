@@ -665,11 +665,12 @@ public class MXMemoryStore implements IMXStore {
     }
 
     private boolean isLastEventInRightPlace(LinkedHashMap<String, Event> events) {
-        if (events.size() < 2) return true;
-        Entry<String, Event>[] eventsEntries = (Entry<String, Event>[]) events.entrySet().toArray();
-        Entry<String, Event> beforeLastEntry = eventsEntries[events.size() - 2];
-        Entry<String, Event> lastEntry = eventsEntries[events.size() - 1];
-        return lastEntry.getValue().originServerTs >= beforeLastEntry.getValue().originServerTs;
+        int eventsSize = events.size();
+        if (eventsSize < 2) return true;
+        Event[] eventsArray = events.values().toArray(new Event[eventsSize]);
+        Event beforeLastEvent = eventsArray[eventsSize - 2];
+        Event lastEvent = eventsArray[eventsSize - 1];
+        return lastEvent.originServerTs >= beforeLastEvent.originServerTs;
     }
 
     @Override
