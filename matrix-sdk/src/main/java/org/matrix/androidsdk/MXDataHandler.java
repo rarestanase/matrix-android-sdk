@@ -508,20 +508,12 @@ public class MXDataHandler {
         if (isAlive()) {
             mBingRulesManager = bingRulesManager;
 
-            // dirty hack to prevent the MXSession object to start a network request... in its
-            // own constructor !!!
-            new Handler(Looper.getMainLooper()).post(new Runnable() {
+            mBingRulesManager.loadRules(new SimpleApiCallback<Void>() {
                 @Override
-                public void run() {
-                    mBingRulesManager.loadRules(new SimpleApiCallback<Void>() {
-                        @Override
-                        public void onSuccess(Void info) {
-                            onBingRulesUpdate();
-                        }
-                    });
+                public void onSuccess(Void info) {
+                    onBingRulesUpdate();
                 }
             });
-
         }
     }
 
