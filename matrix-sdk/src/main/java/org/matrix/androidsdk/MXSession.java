@@ -253,7 +253,8 @@ public class MXSession {
                       @Nullable String pushServerUrl,
                       boolean withFileEncryptionEnabled,
                       boolean withLegacyCryptoStore,
-                      @Nullable MetricsListener metricsListener) {
+                      @Nullable MetricsListener metricsListener,
+                      boolean initDataHandler) {
         this(hsConfig, pushServerUrl);
         mDataHandler = dataHandler;
 
@@ -266,6 +267,12 @@ public class MXSession {
         mCryptoStore = withLegacyCryptoStore ? new MXFileCryptoStore(withFileEncryptionEnabled) : new RealmCryptoStore(withFileEncryptionEnabled);
         mCryptoStore.initWithCredentials(mContext, mCredentials);
 
+        if (initDataHandler) {
+            initDataHandler();
+        }
+    }
+
+    public void initDataHandler() {
         mDataHandler.getStore().addMXStoreListener(new MXStoreListener() {
             @Override
             public void onStoreReady(String accountId) {
@@ -325,7 +332,7 @@ public class MXSession {
         mDataHandler.setAccountDataRestClient(mAccountDataRestClient);
 
         mNetworkConnectivityReceiver = new NetworkConnectivityReceiver();
-        mNetworkConnectivityReceiver.checkNetworkConnection(appContext);
+        mNetworkConnectivityReceiver.checkNetworkConnection(mContext);
         mDataHandler.setNetworkConnectivityReceiver(mNetworkConnectivityReceiver);
         mContext.registerReceiver(mNetworkConnectivityReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
 
@@ -334,7 +341,7 @@ public class MXSession {
 
         mUnsentEventsManager = new UnsentEventsManager(mNetworkConnectivityReceiver, mDataHandler);
 
-        mContentManager = new ContentManager(hsConfig, mUnsentEventsManager);
+        mContentManager = new ContentManager(mHsConfig, mUnsentEventsManager);
 
         //
         mCallsManager = new MXCallsManager(this, mContext);
@@ -356,7 +363,7 @@ public class MXSession {
 
         // return the default cache manager
         mLatestChatMessageCache = new MXLatestChatMessageCache(mCredentials.userId);
-        mMediaCache = new MXMediaCache(mContentManager, mNetworkConnectivityReceiver, mCredentials.userId, appContext);
+        mMediaCache = new MXMediaCache(mContentManager, mNetworkConnectivityReceiver, mCredentials.userId, mContext);
         mDataHandler.setMediaCache(mMediaCache);
 
         mMediaScanRestClient.setMxStore(mDataHandler.getStore());
@@ -2592,6 +2599,7 @@ public class MXSession {
         // Used by unit tests to test Crypto store migration
         private boolean mUseLegacyCryptoStore;
         private MetricsListener mMetricsListener;
+        private boolean mInitDataHandler = true;
 
 
         public Builder(@NonNull HomeServerConnectionConfig hsConfig,
@@ -2636,6 +2644,12 @@ public class MXSession {
             return this;
         }
 
+        public Builder initDataHandler(boolean initDataHandler) {
+            mInitDataHandler = initDataHandler;
+
+            return this;
+        }
+
         /**
          * Build the session
          *
@@ -2648,7 +2662,8 @@ public class MXSession {
                     mPushServerUrl,
                     mEnableFileEncryption,
                     mUseLegacyCryptoStore,
-                    mMetricsListener);
+                    mMetricsListener,
+                    mInitDataHandler);
         }
     }
 
