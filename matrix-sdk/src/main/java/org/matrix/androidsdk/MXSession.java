@@ -94,6 +94,7 @@ import org.matrix.androidsdk.rest.model.sync.RoomResponse;
 import org.matrix.androidsdk.sync.DefaultEventsThreadListener;
 import org.matrix.androidsdk.sync.EventsThread;
 import org.matrix.androidsdk.sync.EventsThreadListener;
+import org.matrix.androidsdk.sync.SyncLifecycleWatcher;
 import org.matrix.androidsdk.util.BingRulesManager;
 import org.matrix.androidsdk.util.ContentManager;
 import org.matrix.androidsdk.util.ContentUtils;
@@ -884,7 +885,8 @@ public class MXSession {
      */
     public void startEventStream(final EventsThreadListener anEventsListener,
                                  final NetworkConnectivityReceiver networkConnectivityReceiver,
-                                 final String initialToken) {
+                                 final String initialToken,
+                                 final SyncLifecycleWatcher syncLifecycleWatcher) {
         checkIfAlive();
 
         // reported by a rageshake issue
@@ -920,6 +922,7 @@ public class MXSession {
             mEventsThread.setIsOnline(mIsOnline);
             mEventsThread.setServerLongPollTimeout(mSyncTimeout);
             mEventsThread.setSyncDelay(mSyncDelay);
+            mEventsThread.setSyncLifecycleWatcher(syncLifecycleWatcher);
 
             if (mFailureCallback != null) {
                 mEventsThread.setFailureCallback(mFailureCallback);
@@ -1116,7 +1119,15 @@ public class MXSession {
      */
     public void startEventStream(String initialToken) {
         checkIfAlive();
-        startEventStream(null, mNetworkConnectivityReceiver, initialToken);
+        startEventStream(null, mNetworkConnectivityReceiver, initialToken, null);
+    }
+
+    public void startEventStream(
+        String initialToken,
+        @Nullable SyncLifecycleWatcher syncLifecycleWatcher
+    ) {
+        checkIfAlive();
+        startEventStream(null, mNetworkConnectivityReceiver, initialToken, syncLifecycleWatcher);
     }
 
     /**

@@ -28,6 +28,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.support.annotation.Nullable;
 
 import org.matrix.androidsdk.data.metrics.MetricsListener;
 import org.matrix.androidsdk.listeners.IMXNetworkEventListener;
@@ -58,6 +59,7 @@ public class EventsThread extends Thread {
 
     private EventsRestClient mEventsRestClient;
     private EventsThreadListener mListener;
+    @Nullable private SyncLifecycleWatcher syncLifecycleWatcher;
     private String mCurrentToken;
 
     private MetricsListener mMetricsListener;
@@ -574,10 +576,16 @@ public class EventsThread extends Thread {
                 final int fServerTimeout = serverTimeout;
                 mNextServerTimeoutms = mDefaultServerTimeoutms;
 
+                if (syncLifecycleWatcher != null) {
+                    syncLifecycleWatcher.onSyncStarted();
+                }
                 mEventsRestClient.syncFromToken(mCurrentToken, serverTimeout, DEFAULT_CLIENT_TIMEOUT_MS, mIsOnline ? null : "offline", mFilterOrFilterId,
                         new SimpleApiCallback<SyncResponse>(mFailureCallback) {
                             @Override
                             public void onSuccess(SyncResponse syncResponse) {
+                                if (syncLifecycleWatcher != null) {
+                                    syncLifecycleWatcher.onSyncFinished();
+                                }
                                 if (!mKilling) {
                                     // poll /sync with timeout=0 until
                                     // we get no to_device messages back.
@@ -628,6 +636,9 @@ public class EventsThread extends Thread {
                             }
 
                             private void onError(String description) {
+                                if (syncLifecycleWatcher != null) {
+                                    syncLifecycleWatcher.onSyncFinished();
+                                }
                                 boolean isConnected;
                                 Log.d(LOG_TAG, "Got an error while polling events " + description);
 
@@ -703,5 +714,9 @@ public class EventsThread extends Thread {
      */
     private boolean isInitialSyncDone() {
         return mCurrentToken != null;
+    }
+
+    public void setSyncLifecycleWatcher(@Nullable SyncLifecycleWatcher watcher) {
+        syncLifecycleWatcher = watcher;
     }
 }
