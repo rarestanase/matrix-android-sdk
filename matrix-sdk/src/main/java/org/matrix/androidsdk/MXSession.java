@@ -1066,6 +1066,9 @@ public class MXSession {
      * Either it is already known to the server, or send the filter to the server to get a filterId
      */
     private void convertFilterToFilterId() {
+        if (mEventsThread == null) {
+            return;
+        }
         // Ensure mCurrentFilter has not been updated in the same time
         final String wantedJsonFilter = mCurrentFilter.toJSONString();
 
