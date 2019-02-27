@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 New Vector Ltd
+ * Copyright 2019 New Vector Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,8 @@
  * limitations under the License.
  */
 
-package org.matrix.androidsdk.crypto.keysbackup
+package org.matrix.androidsdk.rest.model.keys
 
-/**
- * Data model for response to [KeysBackup.isKeyBackupTrusted()].
- */
-class KeyBackupVersionTrust {
-    /**
-     * Flag to indicate if the backup is trusted.
-     * true if there is a signature that is valid & from a trusted device.
-     */
-    var usable = false
-
-    /**
-     * Signatures found in the backup version.
-     */
-    var signatures: MutableList<KeyBackupVersionTrustSignature> = ArrayList()
-}
+class UpdateKeysBackupVersionBody(
+        // the backup version, mandatory
+        val version: String) : KeysAlgorithmAndData()

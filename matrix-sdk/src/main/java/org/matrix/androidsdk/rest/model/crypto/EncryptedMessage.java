@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 New Vector Ltd
+ * Copyright 2019 New Vector Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,18 @@
  * limitations under the License.
  */
 
-package org.matrix.androidsdk.crypto.keysbackup
+package org.matrix.androidsdk.rest.model.crypto;
 
-import org.matrix.androidsdk.crypto.data.MXDeviceInfo
+import com.google.gson.annotations.SerializedName;
 
-/**
- * A signature in a the `KeyBackupVersionTrust` object.
- */
-class KeyBackupVersionTrustSignature {
+import java.util.Map;
 
-    /**
-     * The device that signed the backup version.
-     */
-    var device: MXDeviceInfo? = null
+public class EncryptedMessage implements SendToDeviceObject {
+    public String algorithm;
 
-    /**
-     *Flag to indicate the signature from this device is valid.
-     */
-    var valid = false
+    @SerializedName("sender_key")
+    public String senderKey;
 
+    @SerializedName("ciphertext")
+    public Map<String, Object> cipherText;
 }
