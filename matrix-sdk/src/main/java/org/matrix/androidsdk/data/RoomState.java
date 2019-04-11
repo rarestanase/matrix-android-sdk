@@ -282,15 +282,15 @@ public class RoomState implements Externalizable {
 
                 doTheRequest = mGetAllMembersCallbacks.size() == 1;
             }
-
-            if (doTheRequest) {
+            MXDataHandler dataHandler = getDataHandler();
+            if (doTheRequest && dataHandler != null) {
                 // Load members from server
-                getDataHandler().getMembersAsync(roomId, new SimpleApiCallback<List<RoomMember>>(callback) {
+                dataHandler.getMembersAsync(roomId, new SimpleApiCallback<List<RoomMember>>(callback) {
                     @Override
                     public void onSuccess(List<RoomMember> info) {
                         Log.d(LOG_TAG, "getMembers has returned " + info.size() + " users.");
 
-                        IMXStore store = ((MXDataHandler) mDataHandler).getStore();
+                        IMXStore store = dataHandler.getStore();
                         List<RoomMember> res;
 
                         for (RoomMember member : info) {
@@ -522,7 +522,8 @@ public class RoomState implements Externalizable {
         if (member == null) {
             Log.w(LOG_TAG, "## Null member '" + userId);
 
-            if (TextUtils.equals(getDataHandler().getUserId(), userId)) {
+            MXDataHandler dataHandler = getDataHandler();
+            if (dataHandler != null && TextUtils.equals(dataHandler.getUserId(), userId)) {
                 // This should never happen
                 Log.e(LOG_TAG, "## Null current user '" + userId);
             }
@@ -1082,6 +1083,7 @@ public class RoomState implements Externalizable {
 
         // Get the user display name from the member list of the room
         RoomMember member = getMember(userId);
+        MXDataHandler dataHandler = getDataHandler();
 
         // Do not consider null display name
         if ((null != member) && !TextUtils.isEmpty(member.displayname)) {
@@ -1103,8 +1105,12 @@ public class RoomState implements Externalizable {
                     displayName += " (" + userId + ")";
                 }
             }
-        } else if ((null != member) && TextUtils.equals(member.membership, RoomMember.MEMBERSHIP_INVITE)) {
-            User user = ((MXDataHandler) mDataHandler).getUser(userId);
+        } else if (
+            (null != member) &&
+            TextUtils.equals(member.membership, RoomMember.MEMBERSHIP_INVITE) &&
+            dataHandler != null
+        ) {
+            User user = dataHandler.getUser(userId);
 
             if (null != user) {
                 displayName = user.displayname;
