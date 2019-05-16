@@ -36,6 +36,7 @@ import org.matrix.androidsdk.rest.model.group.Group;
 import org.matrix.androidsdk.rest.model.pid.ThirdPartyIdentifier;
 import org.matrix.androidsdk.rest.model.sync.AccountData;
 import org.matrix.androidsdk.rest.model.sync.AccountDataElement;
+import org.matrix.androidsdk.util.Predicate;
 
 import java.util.Collection;
 import java.util.List;
@@ -367,6 +368,16 @@ public interface IMXStore {
      * @return the event
      */
     Event getLatestEvent(String roomId);
+
+    /**
+     * Get the latest event from the given room (to update summary for example) matching a
+     * given predicate
+     *
+     * @param roomId the room id
+     * @param eventPredicate the predicate
+     * @return the event
+     */
+    Event getLatestEvent(String roomId, Predicate<Event> eventPredicate);
 
     /**
      * Count the number of events after the provided events id

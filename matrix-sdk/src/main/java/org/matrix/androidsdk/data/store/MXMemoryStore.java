@@ -42,6 +42,7 @@ import org.matrix.androidsdk.rest.model.pid.ThirdPartyIdentifier;
 import org.matrix.androidsdk.rest.model.sync.AccountData;
 import org.matrix.androidsdk.rest.model.sync.AccountDataElement;
 import org.matrix.androidsdk.util.Log;
+import org.matrix.androidsdk.util.Predicate;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -578,6 +579,17 @@ public class MXMemoryStore implements IMXStore {
      */
     @Override
     public Event getLatestEvent(String roomId) {
+        return getLatestEvent(roomId, new Predicate<Event>() {
+            @Override
+            public boolean test(Event item) {
+                // match all events
+                return true;
+            }
+        });
+    }
+
+    @Override
+    public Event getLatestEvent(String roomId, Predicate<Event> eventPredicate) {
         Event event = null;
 
         if (null != roomId) {
@@ -587,13 +599,16 @@ public class MXMemoryStore implements IMXStore {
                 if (events != null) {
                     Iterator<Event> it = events.values().iterator();
                     if (it.hasNext()) {
-                        Event lastEvent = null;
+                        Event lastMatchingEvent = null;
 
                         while (it.hasNext()) {
-                            lastEvent = it.next();
+                            Event nextEvent = it.next();
+                            if (eventPredicate.test(nextEvent)) {
+                                lastMatchingEvent = nextEvent;
+                            }
                         }
 
-                        event = lastEvent;
+                        event = lastMatchingEvent;
                     }
                 }
             }
