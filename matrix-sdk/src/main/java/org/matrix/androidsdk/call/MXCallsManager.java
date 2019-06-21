@@ -177,9 +177,9 @@ public class MXCallsManager {
             list.add(CallClass.CHROME_CLASS);
         }*/
 
-        if (MXWebRtcCall.isSupported(mContext)) {
-            list.add(CallClass.WEBRTC_CLASS);
-        }
+//        if (MXWebRtcCall.isSupported(mContext)) {
+//            list.add(CallClass.WEBRTC_CLASS);
+//        }
 
         Log.d(LOG_TAG, "supportedClass " + list);
 
@@ -198,9 +198,9 @@ public class MXCallsManager {
             isUpdatable = MXChromeCall.isSupported();
         }*/
 
-        if (callClass == CallClass.WEBRTC_CLASS) {
-            isUpdatable = MXWebRtcCall.isSupported(mContext);
-        }
+//        if (callClass == CallClass.WEBRTC_CLASS) {
+//            isUpdatable = MXWebRtcCall.isSupported(mContext);
+//        }
 
         if (isUpdatable) {
             mPreferredCallClass = callClass;
@@ -224,18 +224,18 @@ public class MXCallsManager {
         }*/
 
         // webrtc
-        if (null == call) {
-            try {
-                call = new MXWebRtcCall(mSession, mContext, getTurnServer());
-            } catch (Exception e) {
-                Log.e(LOG_TAG, "createCall " + e.getMessage(), e);
-            }
-        }
+//        if (null == call) {
+//            try {
+//                call = new MXWebRtcCall(mSession, mContext, getTurnServer());
+//            } catch (Exception e) {
+//                Log.e(LOG_TAG, "createCall " + e.getMessage(), e);
+//            }
+//        }
 
         // a valid callid is provided
-        if (null != callId) {
-            call.setCallId(callId);
-        }
+//        if (null != callId) {
+//            call.setCallId(callId);
+//        }
 
         return call;
     }
