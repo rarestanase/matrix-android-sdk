@@ -25,6 +25,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.reflect.TypeToken;
 
 import org.matrix.androidsdk.rest.json.BooleanDeserializer;
 import org.matrix.androidsdk.rest.json.ConditionDeserializer;
@@ -62,6 +63,7 @@ import org.matrix.androidsdk.rest.model.pid.RoomThirdPartyInvite;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Type;
 import java.util.Map;
 import java.util.TreeSet;
 
@@ -361,6 +363,11 @@ public class JsonUtils {
      */
     public static ImageMessage toImageMessage(JsonElement jsonObject) {
         return toClass(jsonObject, ImageMessage.class);
+    }
+
+    public static Map<String, Object> toMap(JsonElement jsonElement) {
+        Type type = new TypeToken<Map<String, Object>>(){}.getType();
+        return gson.fromJson(jsonElement, type);
     }
 
     /**
