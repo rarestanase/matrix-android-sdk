@@ -16,6 +16,8 @@
  */
 package org.matrix.androidsdk.rest.model;
 
+import android.support.annotation.Nullable;
+
 import com.google.gson.JsonElement;
 import com.google.gson.annotations.SerializedName;
 
@@ -49,4 +51,6 @@ public class UnsignedData implements java.io.Serializable {
      * The previous event content (room member information only)
      */
     public transient JsonElement prev_content;
+
+    @Nullable public String prev_sender;
 }
