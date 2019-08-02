@@ -99,6 +99,8 @@ public class MatrixMessagesFragment extends Fragment {
 
         // get the room preview data
         RoomPreviewData getRoomPreviewData();
+
+        void onRoomJoined();
     }
 
     // The listener to send messages back
@@ -617,6 +619,10 @@ public class MatrixMessagesFragment extends Fragment {
             public void onSuccess(Void info) {
                 Log.d(LOG_TAG, "joinRoom succeeds");
                 requestInitialHistory();
+
+                if (null != mMatrixMessagesListener) {
+                    mMatrixMessagesListener.onRoomJoined();
+                }
             }
 
             private void onError(String errorMessage) {
