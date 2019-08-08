@@ -594,6 +594,14 @@ class MXEventTimeline implements EventTimeline {
                 && mRoom.isReady();
     }
 
+    @Override
+    public boolean canForwardPaginate() {
+        return !mIsLiveTimeline
+            && !mIsForwardPaginating
+            && !mHasReachedHomeServerForwardsPaginationEnd
+            && mRoom.isReady();
+    }
+
     /**
      * Request older messages.
      *
