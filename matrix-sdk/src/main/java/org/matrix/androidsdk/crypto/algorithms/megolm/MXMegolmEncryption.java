@@ -69,7 +69,7 @@ public class MXMegolmEncryption implements IMXEncrypting {
 
     // Session rotation periods
     private int mSessionRotationPeriodMsgs;
-    private int mSessionRotationPeriodMs;
+    private long mSessionRotationPeriodMs;
 
     @Override
     public void initWithMatrixSession(MXSession matrixSession, String roomId) {
@@ -81,8 +81,8 @@ public class MXMegolmEncryption implements IMXEncrypting {
 
         // Default rotation periods
         // TODO: Make it configurable via parameters
-        mSessionRotationPeriodMsgs = 100;
-        mSessionRotationPeriodMs = 7 * 24 * 3600 * 1000;
+        mSessionRotationPeriodMsgs = 1000;
+        mSessionRotationPeriodMs = 365 * 24 * 3600 * 1000L;
     }
 
     /**
