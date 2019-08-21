@@ -1238,16 +1238,12 @@ public class MXMemoryStore implements IMXStore {
                 // copy the user id list to avoid having update while looping
                 List<String> userIds = new ArrayList<>(receiptsByUserId.keySet());
 
-                if (null == eventId) {
-                    receipts.addAll(receiptsByUserId.values());
-                } else {
-                    for (String userId : userIds) {
-                        if (receiptsByUserId.containsKey(userId) && (!excludeSelf || !TextUtils.equals(myUserID, userId))) {
-                            ReceiptData receipt = receiptsByUserId.get(userId);
+                for (String userId : userIds) {
+                    if (receiptsByUserId.containsKey(userId) && (!excludeSelf || !TextUtils.equals(myUserID, userId))) {
+                        ReceiptData receipt = receiptsByUserId.get(userId);
 
-                            if (TextUtils.equals(receipt.eventId, eventId)) {
-                                receipts.add(receipt);
-                            }
+                        if (eventId == null || TextUtils.equals(receipt.eventId, eventId)) {
+                            receipts.add(receipt);
                         }
                     }
                 }
