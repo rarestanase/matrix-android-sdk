@@ -78,6 +78,8 @@ public class RoomState implements Externalizable {
     public static final String HISTORY_VISIBILITY_JOINED = "joined";
     public static final String HISTORY_VISIBILITY_WORLD_READABLE = "world_readable";
 
+    @Nullable
+    private static NameDisambiguator nameDisambiguator;
 
     // Public members used for JSON mapping
 
@@ -282,7 +284,7 @@ public class RoomState implements Externalizable {
 
                 doTheRequest = mGetAllMembersCallbacks.size() == 1;
             }
-            MXDataHandler dataHandler = getDataHandler();
+            final MXDataHandler dataHandler = getDataHandler();
             if (doTheRequest && dataHandler != null) {
                 // Load members from server
                 dataHandler.getMembersAsync(roomId, new SimpleApiCallback<List<RoomMember>>(callback) {
@@ -1098,11 +1100,12 @@ public class RoomState implements Externalizable {
                         matrixIds.add(aMember.getUserId());
                     }
                 }
-
                 // if several users have the same display name
                 // index it i.e bob (<Matrix id>)
                 if (matrixIds.size() > 1) {
-                    displayName += " (" + userId + ")";
+
+                    String nameDisambiguated = disambiguateName(userId);
+                    displayName += " (" + nameDisambiguated + ")";
                 }
             }
         } else if (
@@ -1125,6 +1128,19 @@ public class RoomState implements Externalizable {
         mMemberDisplayNameByUserId.put(userId, displayName);
 
         return displayName;
+    }
+
+    private String disambiguateName(String userId) {
+        if (nameDisambiguator != null) {
+            String disambiguatedName = nameDisambiguator.disambiguate(userId);
+            if (disambiguatedName != null) {
+                return disambiguatedName;
+            } else {
+                return userId;
+            }
+        } else {
+            return userId;
+        }
     }
 
     @Override
@@ -1353,5 +1369,14 @@ public class RoomState implements Externalizable {
         if (null != mRoomTombstoneContent) {
             output.writeObject(mRoomTombstoneContent);
         }
+    }
+
+    public static void setNameDisambiguator(@Nullable NameDisambiguator newNameDisambiguator) {
+        nameDisambiguator = newNameDisambiguator;
+    }
+
+    public interface NameDisambiguator {
+        @Nullable
+        String disambiguate(String matrixId);
     }
 }
