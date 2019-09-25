@@ -981,8 +981,10 @@ public class MXSession {
         if (isOnline != mIsOnline) {
             mIsOnline = isOnline;
 
-            if (null != mEventsThread) {
-                mEventsThread.setIsOnline(isOnline);
+            synchronized (LOG_TAG) {
+                if (null != mEventsThread) {
+                    mEventsThread.setIsOnline(isOnline);
+                }
             }
         }
     }
@@ -1001,8 +1003,10 @@ public class MXSession {
      */
     public void setSyncTimeout(int ms) {
         mSyncTimeout = ms;
-        if (null != mEventsThread) {
-            mEventsThread.setServerLongPollTimeout(ms);
+        synchronized (LOG_TAG) {
+            if (null != mEventsThread) {
+                mEventsThread.setServerLongPollTimeout(ms);
+            }
         }
     }
 
@@ -1020,8 +1024,10 @@ public class MXSession {
      */
     public void setSyncDelay(int ms) {
         mSyncDelay = ms;
-        if (null != mEventsThread) {
-            mEventsThread.setSyncDelay(ms);
+        synchronized (LOG_TAG) {
+            if (null != mEventsThread) {
+                mEventsThread.setSyncDelay(ms);
+            }
         }
     }
 
@@ -1040,8 +1046,10 @@ public class MXSession {
     public void setUseDataSaveMode(boolean enabled) {
         mUseDataSaveMode = enabled;
 
-        if (mEventsThread != null) {
-            setSyncFilter(mCurrentFilter);
+        synchronized (LOG_TAG) {
+            if (mEventsThread != null) {
+                setSyncFilter(mCurrentFilter);
+            }
         }
     }
 
@@ -1066,36 +1074,38 @@ public class MXSession {
      * Either it is already known to the server, or send the filter to the server to get a filterId
      */
     private void convertFilterToFilterId() {
-        if (mEventsThread == null) {
-            return;
-        }
-        // Ensure mCurrentFilter has not been updated in the same time
-        final String wantedJsonFilter = mCurrentFilter.toJSONString();
+        synchronized (LOG_TAG) {
+            if (mEventsThread == null) {
+                return;
+            }
+            // Ensure mCurrentFilter has not been updated in the same time
+            final String wantedJsonFilter = mCurrentFilter.toJSONString();
 
-        // Check if the current filter is known by the server, to directly use the filterId
-        String filterId = getDataHandler().getStore().getFilters().get(wantedJsonFilter);
+            // Check if the current filter is known by the server, to directly use the filterId
+            String filterId = getDataHandler().getStore().getFilters().get(wantedJsonFilter);
 
-        if (TextUtils.isEmpty(filterId)) {
-            // enable the filter in JSON representation so do not block sync until the filter response is there
-            mEventsThread.setFilterOrFilterId(wantedJsonFilter);
+            if (TextUtils.isEmpty(filterId)) {
+                // enable the filter in JSON representation so do not block sync until the filter response is there
+                mEventsThread.setFilterOrFilterId(wantedJsonFilter);
 
-            // Send the filter to the server
-            mFilterRestClient.uploadFilter(getMyUserId(), mCurrentFilter, new SimpleApiCallback<FilterResponse>() {
-                @Override
-                public void onSuccess(FilterResponse filter) {
-                    // Store the couple filter/filterId
-                    getDataHandler().getStore().addFilter(wantedJsonFilter, filter.filterId);
+                // Send the filter to the server
+                mFilterRestClient.uploadFilter(getMyUserId(), mCurrentFilter, new SimpleApiCallback<FilterResponse>() {
+                    @Override
+                    public void onSuccess(FilterResponse filter) {
+                        // Store the couple filter/filterId
+                        getDataHandler().getStore().addFilter(wantedJsonFilter, filter.filterId);
 
-                    // Ensure the filter is still corresponding to the current filter
-                    if (TextUtils.equals(wantedJsonFilter, mCurrentFilter.toJSONString())) {
-                        // Tell the event thread to use the id now
-                        mEventsThread.setFilterOrFilterId(filter.filterId);
+                        // Ensure the filter is still corresponding to the current filter
+                        if (TextUtils.equals(wantedJsonFilter, mCurrentFilter.toJSONString())) {
+                            // Tell the event thread to use the id now
+                            mEventsThread.setFilterOrFilterId(filter.filterId);
+                        }
                     }
-                }
-            });
-        } else {
-            // Tell the event thread to use the id now
-            mEventsThread.setFilterOrFilterId(filterId);
+                });
+            } else {
+                // Tell the event thread to use the id now
+                mEventsThread.setFilterOrFilterId(filterId);
+            }
         }
     }
 
@@ -1126,17 +1136,21 @@ public class MXSession {
      * Gracefully stop the event stream.
      */
     public void stopEventStream() {
-        if (null != mCallsManager) {
-            mCallsManager.stopTurnServerRefresh();
-        }
+        // Synchronize to avoid concurrency issues with startEventStream()
+        // especially about access to mEventsThread
+        synchronized (LOG_TAG) {
+            if (null != mCallsManager) {
+                mCallsManager.stopTurnServerRefresh();
+            }
 
-        if (null != mEventsThread) {
-            Log.d(LOG_TAG, "stopEventStream");
+            if (null != mEventsThread) {
+                Log.d(LOG_TAG, "stopEventStream");
 
-            mEventsThread.kill();
-            mEventsThread = null;
-        } else {
-            Log.e(LOG_TAG, "stopEventStream : mEventsThread is already null");
+                mEventsThread.kill();
+                mEventsThread = null;
+            } else {
+                Log.e(LOG_TAG, "stopEventStream : mEventsThread is already null");
+            }
         }
     }
 
@@ -1150,11 +1164,13 @@ public class MXSession {
             mCallsManager.pauseTurnServerRefresh();
         }
 
-        if (null != mEventsThread) {
-            Log.d(LOG_TAG, "pauseEventStream");
-            mEventsThread.pause();
-        } else {
-            Log.e(LOG_TAG, "pauseEventStream : mEventsThread is null");
+        synchronized (LOG_TAG) {
+            if (null != mEventsThread) {
+                Log.d(LOG_TAG, "pauseEventStream");
+                mEventsThread.pause();
+            } else {
+                Log.e(LOG_TAG, "pauseEventStream : mEventsThread is null");
+            }
         }
 
         if (null != getMediaCache()) {
@@ -1189,11 +1205,13 @@ public class MXSession {
             mCallsManager.unpauseTurnServerRefresh();
         }
 
-        if (null != mEventsThread) {
-            Log.d(LOG_TAG, "## resumeEventStream() : unpause");
-            mEventsThread.unpause();
-        } else {
-            Log.e(LOG_TAG, "resumeEventStream : mEventsThread is null");
+        synchronized (LOG_TAG) {
+            if (null != mEventsThread) {
+                Log.d(LOG_TAG, "## resumeEventStream() : unpause");
+                mEventsThread.unpause();
+            } else {
+                Log.e(LOG_TAG, "resumeEventStream : mEventsThread is null");
+            }
         }
 
         if (mIsBgCatchupPending) {
@@ -1216,12 +1234,14 @@ public class MXSession {
     public void catchupEventStream() {
         checkIfAlive();
 
-        if (null != mEventsThread) {
-            Log.d(LOG_TAG, "catchupEventStream");
-            mEventsThread.catchup();
-        } else {
-            Log.e(LOG_TAG, "catchupEventStream : mEventsThread is null so catchup when the thread will be created");
-            mIsBgCatchupPending = true;
+        synchronized (LOG_TAG) {
+            if (null != mEventsThread) {
+                Log.d(LOG_TAG, "catchupEventStream");
+                mEventsThread.catchup();
+            } else {
+                Log.e(LOG_TAG, "catchupEventStream : mEventsThread is null so catchup when the thread will be created");
+                mIsBgCatchupPending = true;
+            }
         }
     }
 
@@ -1234,8 +1254,10 @@ public class MXSession {
         checkIfAlive();
 
         mFailureCallback = failureCallback;
-        if (mEventsThread != null) {
-            mEventsThread.setFailureCallback(failureCallback);
+        synchronized (LOG_TAG) {
+            if (mEventsThread != null) {
+                mEventsThread.setFailureCallback(failureCallback);
+            }
         }
     }
 
