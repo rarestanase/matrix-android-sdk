@@ -614,7 +614,7 @@ public class MatrixMessagesFragment extends Fragment {
 
         Log.d(LOG_TAG, "joinRoom " + mRoom.getRoomId());
 
-        mRoom.join(new SimpleApiCallback<Void>(getActivity()) {
+        performRoomJoin(mRoom, new SimpleApiCallback<Void>(getActivity()) {
             @Override
             public void onSuccess(Void info) {
                 Log.d(LOG_TAG, "joinRoom succeeds");
@@ -651,5 +651,9 @@ public class MatrixMessagesFragment extends Fragment {
                 onError(e.getLocalizedMessage());
             }
         });
+    }
+
+    protected void performRoomJoin(Room room, ApiCallback<Void> callback) {
+        room.join(callback);
     }
 }
