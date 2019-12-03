@@ -29,6 +29,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
+import org.matrix.androidsdk.MXDataHandler;
 import org.matrix.androidsdk.MXSession;
 import org.matrix.androidsdk.crypto.algorithms.IMXDecrypting;
 import org.matrix.androidsdk.crypto.algorithms.IMXEncrypting;
@@ -563,9 +564,9 @@ public class MXCrypto {
     /**
      * Close the crypto
      */
-    public void close() {
+    public void close(MXDataHandler dataHandler) {
         if (null != mEncryptingHandlerThread) {
-            mSession.getDataHandler().setCryptoEventsListener(null);
+            dataHandler.setCryptoEventsListener(null);
             getEncryptingThreadHandler().post(new Runnable() {
                 @Override
                 public void run() {

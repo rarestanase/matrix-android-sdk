@@ -20,12 +20,20 @@ package org.matrix.androidsdk.crypto
 
 import android.support.test.InstrumentationRegistry
 import android.text.TextUtils
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runners.MethodSorters
-import org.matrix.androidsdk.common.*
+import org.matrix.androidsdk.common.CommonTestHelper
+import org.matrix.androidsdk.common.CryptoTestHelper
+import org.matrix.androidsdk.common.SessionTestParams
+import org.matrix.androidsdk.common.TestApiCallback
+import org.matrix.androidsdk.common.TestConstants
 import org.matrix.androidsdk.crypto.data.MXDeviceInfo
 import org.matrix.androidsdk.crypto.data.MXOlmSession
 import org.matrix.androidsdk.data.RoomState
@@ -306,8 +314,8 @@ class CryptoStoreImportationTest {
         assertTrue(results.containsKey("onLiveEvent"))
 
         // Close alice and bob session
-        aliceSession.crypto!!.close()
-        bobSession.crypto!!.close()
+        aliceSession.crypto!!.close(aliceSession.dataHandler)
+        bobSession.crypto!!.close(bobSession.dataHandler)
 
         // Do not login, but instead create a new session
         val aliceSession2 = mTestHelper.createNewSession(aliceSession, sessionTestParamRealm)

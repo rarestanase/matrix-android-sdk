@@ -659,8 +659,6 @@ public class MXSession {
      * Clear the application cache
      */
     private void clearApplicationCaches(Context context) {
-        mDataHandler.clear();
-
         // network event will not be listened anymore
         try {
             mContext.unregisterReceiver(mNetworkConnectivityReceiver);
@@ -676,8 +674,9 @@ public class MXSession {
         mMediaCache.clear();
 
         if (null != mCrypto) {
-            mCrypto.close();
+            mCrypto.close(mDataHandler);
         }
+        mDataHandler.clear();
     }
 
     /**
@@ -2448,7 +2447,7 @@ public class MXSession {
                 });
             } else if (null != mCrypto) {
                 Log.d(LOG_TAG, "Crypto is disabled");
-                mCrypto.close();
+                mCrypto.close(getDataHandler());
                 mCryptoStore.deleteStore();
                 mCrypto = null;
                 mDataHandler.setCrypto(null);
