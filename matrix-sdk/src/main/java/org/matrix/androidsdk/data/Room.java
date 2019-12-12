@@ -1420,6 +1420,7 @@ public class Room {
         // reported by GA
         if (null == lastEvent) {
             Log.e(LOG_TAG, "## sendReadMarkers(): no last event");
+            aRespCallback.onSuccess(null);
             return false;
         }
 
@@ -1474,6 +1475,8 @@ public class Room {
 
         if (hasUpdate) {
             setReadMarkers(readMarkerEventId, readReceiptEventId, aRespCallback);
+        } else {
+            aRespCallback.onSuccess(null);
         }
 
         return hasUpdate;
@@ -1510,6 +1513,29 @@ public class Room {
                         public void onSuccess(Void info) {
                             if (null != callback) {
                                 callback.onSuccess(info);
+                            }
+                        }
+
+                        @Override
+                        public void onNetworkError(Exception e) {
+                            if (null != callback) {
+                                callback.onNetworkError(e);
+                            }
+                            super.onNetworkError(e);
+                        }
+
+                        @Override
+                        public void onMatrixError(MatrixError e) {
+                            if (null != callback) {
+                                callback.onMatrixError(e);
+                            }
+
+                        }
+
+                        @Override
+                        public void onUnexpectedError(Exception e) {
+                            if (null != callback) {
+                                callback.onUnexpectedError(e);
                             }
                         }
                     });
