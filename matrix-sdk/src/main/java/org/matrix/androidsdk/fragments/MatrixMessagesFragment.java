@@ -99,6 +99,8 @@ public class MatrixMessagesFragment extends Fragment {
 
         // get the room preview data
         RoomPreviewData getRoomPreviewData();
+
+        void onRoomJoined();
     }
 
     // The listener to send messages back
@@ -612,11 +614,15 @@ public class MatrixMessagesFragment extends Fragment {
 
         Log.d(LOG_TAG, "joinRoom " + mRoom.getRoomId());
 
-        mRoom.join(new SimpleApiCallback<Void>(getActivity()) {
+        performRoomJoin(mRoom, new SimpleApiCallback<Void>(getActivity()) {
             @Override
             public void onSuccess(Void info) {
                 Log.d(LOG_TAG, "joinRoom succeeds");
                 requestInitialHistory();
+
+                if (null != mMatrixMessagesListener) {
+                    mMatrixMessagesListener.onRoomJoined();
+                }
             }
 
             private void onError(String errorMessage) {
@@ -645,5 +651,9 @@ public class MatrixMessagesFragment extends Fragment {
                 onError(e.getLocalizedMessage());
             }
         });
+    }
+
+    protected void performRoomJoin(Room room, ApiCallback<Void> callback) {
+        room.join(callback);
     }
 }

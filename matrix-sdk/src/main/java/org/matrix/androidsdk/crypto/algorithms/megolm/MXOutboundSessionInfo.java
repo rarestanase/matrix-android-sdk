@@ -47,7 +47,7 @@ public class MXOutboundSessionInfo {
         mUseCount = 0;
     }
 
-    public boolean needsRotation(int rotationPeriodMsgs, int rotationPeriodMs) {
+    public boolean needsRotation(int rotationPeriodMsgs, long rotationPeriodMs) {
         boolean needsRotation = false;
         long sessionLifetime = System.currentTimeMillis() - mCreationTime;
 

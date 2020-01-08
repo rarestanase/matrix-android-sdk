@@ -245,6 +245,8 @@ public class MXMediaUploadWorkerTask extends AsyncTask<Void, Void, String> {
      * refresh the progress info
      */
     private void publishProgress(long startUploadTime) {
+        if (mUploadStats == null) return;
+
         mUploadStats.mElapsedTime = (int) ((System.currentTimeMillis() - startUploadTime) / 1000);
 
         if (0 != mUploadStats.mFileSize) {

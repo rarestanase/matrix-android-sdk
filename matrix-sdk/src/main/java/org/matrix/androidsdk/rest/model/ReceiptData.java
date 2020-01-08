@@ -18,7 +18,7 @@ package org.matrix.androidsdk.rest.model;
 
 import org.matrix.androidsdk.interfaces.DatedObject;
 
-public class ReceiptData implements java.io.Serializable, DatedObject {
+public class ReceiptData implements java.io.Serializable, DatedObject, Comparable<ReceiptData> {
 
     // the user id
     public String userId;
@@ -38,5 +38,28 @@ public class ReceiptData implements java.io.Serializable, DatedObject {
     @Override
     public long getDate() {
         return originServerTs;
+    }
+
+
+    @Override
+    public int compareTo(ReceiptData that) {
+        if (this.eventId.compareTo(that.eventId) < 0) {
+            return -1;
+        } else if (this.eventId.compareTo(that.eventId) > 0) {
+            return 1;
+        }
+
+        if (this.originServerTs > that.originServerTs) {
+            return -1;
+        } else if (this.originServerTs < that.originServerTs) {
+            return 1;
+        }
+
+        if (this.userId.compareTo(that.userId) < 0) {
+            return -1;
+        } else if (this.userId.compareTo(that.userId) > 0) {
+            return 1;
+        }
+        return 0;
     }
 }

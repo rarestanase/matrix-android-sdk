@@ -133,6 +133,13 @@ public interface EventTimeline {
     boolean canBackPaginate();
 
     /**
+     * Tells if a forward pagination can be triggered.
+     *
+     * @return true if a forward pagination can be triggered.
+     */
+    boolean canForwardPaginate();
+
+    /**
      * Request older messages.
      *
      * @param callback the asynchronous callback

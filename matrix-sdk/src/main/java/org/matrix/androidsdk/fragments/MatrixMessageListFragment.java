@@ -2109,6 +2109,11 @@ public abstract class MatrixMessageListFragment<MessagesAdapter extends Abstract
     }
 
     @Override
+    public void onRoomJoined() {
+        // no-op : to be overridden
+    }
+
+    @Override
     public void onRoomFlush() {
         mAdapter.clear();
     }
