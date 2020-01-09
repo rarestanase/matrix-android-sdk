@@ -9,6 +9,10 @@ public interface OlmChannel {
     void setChannelListener(OlmChannelListener listener);
 
     interface OlmChannelListener {
-        void onEventReceived(String eventId, Map<String, Object> payload);
+        void onEventReceived(
+            String senderDeviceId,
+            String eventId,
+            Map<String, Object> payload
+        );
     }
 }

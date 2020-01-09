@@ -186,9 +186,10 @@ public class MXOlmChannel implements OlmChannel {
     }
 
     public void onEventReceived(Event event) {
-        if (listener != null) {
+        boolean isSameUser = mSession.getMyUserId().equals(event.getSenderUserId());
+        if (listener != null && isSameUser) {
             Map<String, Object> payload = JsonUtils.toMap(event.getContent());
-            listener.onEventReceived(event.getType(), payload);
+            listener.onEventReceived(event.getSenderDeviceId(), event.getType(), payload);
         }
     }
 }
