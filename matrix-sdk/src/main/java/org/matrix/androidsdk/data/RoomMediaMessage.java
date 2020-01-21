@@ -56,7 +56,7 @@ import java.util.List;
 public class RoomMediaMessage implements Parcelable {
     private static final String LOG_TAG = RoomMediaMessage.class.getSimpleName();
 
-    private static final Uri mDummyUri = Uri.parse("http://www.matrixdummy.org");
+    private static final Uri mDummyUri = Uri.parse("https://join.citadel.team/android-0011");
 
     /**
      * Interface to monitor event creation.
