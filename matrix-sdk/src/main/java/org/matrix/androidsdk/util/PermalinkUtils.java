@@ -38,7 +38,7 @@ import java.util.Set;
 public class PermalinkUtils {
     private static final String LOG_TAG = PermalinkUtils.class.getSimpleName();
 
-    private static final String MATRIX_TO_URL_BASE = "https://matrix.to/#/";
+    private static final String MATRIX_TO_URL_BASE = "#/";
 
     // index of each items in the map when parsing a universal link
     public static final String ULINK_ROOM_ID_OR_ALIAS_KEY = "ULINK_ROOM_ID_OR_ALIAS_KEY";
