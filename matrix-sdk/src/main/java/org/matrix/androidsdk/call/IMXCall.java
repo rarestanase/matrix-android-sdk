@@ -28,7 +28,7 @@ import javax.annotation.Nullable;
 
 /**
  * Audio/video call interface.
- * See {@link MXWebRtcCall} and {@link MXChromeCall}.
+ * See {@link MXWebRtcCall}
  */
 public interface IMXCall {
 

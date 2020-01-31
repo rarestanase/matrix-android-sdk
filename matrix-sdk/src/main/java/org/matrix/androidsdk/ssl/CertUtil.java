@@ -189,7 +189,7 @@ public class CertUtil {
             }
         }
 
-        X509TrustManager trustManager = new PinnedTrustManager(hsConfig.getAllowedFingerprints(), defaultTrustManager);
+        X509TrustManager trustManager = defaultTrustManager; // use the default trustmanager
 
         TrustManager[] trustManagers = new TrustManager[]{
                 trustManager
