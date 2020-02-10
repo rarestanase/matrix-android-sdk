@@ -80,7 +80,7 @@ public class JsonUtils {
 
     private static final Gson gson = new GsonBuilder()
             .setFieldNamingStrategy(new MatrixFieldNamingStrategy())
-            .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.STATIC)
+            .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.PROTECTED, Modifier.STATIC)
             .registerTypeAdapter(Condition.class, new ConditionDeserializer())
             .registerTypeAdapter(boolean.class, new BooleanDeserializer(false))
             .registerTypeAdapter(Boolean.class, new BooleanDeserializer(true))
@@ -91,7 +91,7 @@ public class JsonUtils {
     // serializeNulls forces to add them.
     private static final Gson gsonWithNullSerialization = new GsonBuilder()
             .setFieldNamingStrategy(new MatrixFieldNamingStrategy())
-            .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.STATIC)
+            .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.PROTECTED, Modifier.STATIC)
             .serializeNulls()
             .registerTypeAdapter(Condition.class, new ConditionDeserializer())
             .registerTypeAdapter(boolean.class, new BooleanDeserializer(false))
@@ -103,7 +103,7 @@ public class JsonUtils {
     private static final Gson gsonWithoutHtmlEscaping = new GsonBuilder()
             .setFieldNamingStrategy(new MatrixFieldNamingStrategy())
             .disableHtmlEscaping()
-            .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.STATIC)
+            .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.PROTECTED, Modifier.STATIC)
             .registerTypeAdapter(Condition.class, new ConditionDeserializer())
             .registerTypeAdapter(boolean.class, new BooleanDeserializer(false))
             .registerTypeAdapter(Boolean.class, new BooleanDeserializer(true))

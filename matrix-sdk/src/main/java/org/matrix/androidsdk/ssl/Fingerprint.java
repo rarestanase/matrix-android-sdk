@@ -17,6 +17,7 @@
 
 package org.matrix.androidsdk.ssl;
 
+import android.support.annotation.Keep;
 import android.util.Base64;
 
 import org.json.JSONException;
@@ -30,6 +31,7 @@ import java.util.Arrays;
  * Represents a X509 Certificate fingerprint.
  */
 public class Fingerprint {
+    @Keep
     public enum HashType {
         SHA1,
         SHA256
