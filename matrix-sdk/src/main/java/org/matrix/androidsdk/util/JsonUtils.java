@@ -30,6 +30,7 @@ import com.google.gson.reflect.TypeToken;
 import org.matrix.androidsdk.rest.json.BooleanDeserializer;
 import org.matrix.androidsdk.rest.json.ConditionDeserializer;
 import org.matrix.androidsdk.rest.json.MatrixFieldNamingStrategy;
+import org.matrix.androidsdk.rest.json.ObjectMapDeserializer;
 import org.matrix.androidsdk.rest.model.ContentResponse;
 import org.matrix.androidsdk.rest.model.Event;
 import org.matrix.androidsdk.rest.model.EventContent;
@@ -86,6 +87,7 @@ public class JsonUtils {
             .registerTypeAdapter(Condition.class, new ConditionDeserializer())
             .registerTypeAdapter(boolean.class, new BooleanDeserializer(false))
             .registerTypeAdapter(Boolean.class, new BooleanDeserializer(true))
+            .registerTypeAdapter(new TypeToken<Map<String, Object>>(){}.getType(), new ObjectMapDeserializer())
             .create();
 
     // add a call to serializeNulls().
