@@ -16,12 +16,14 @@
 
 package org.matrix.androidsdk.crypto.keysbackup
 
+import android.support.annotation.Keep
 import com.google.gson.annotations.SerializedName
 
 /**
  * Data model for [org.matrix.androidsdk.rest.model.keys.KeysAlgorithmAndData.authData] in case
  * of [org.matrix.androidsdk.crypto.MXCRYPTO_ALGORITHM_MEGOLM_BACKUP].
  */
+@Keep
 data class MegolmBackupAuthData(
         /**
          * The curve25519 public key used to encrypt the backups.
@@ -46,6 +48,7 @@ data class MegolmBackupAuthData(
          * Signatures of the public key.
          * userId -> (deviceSignKeyId -> signature)
          */
+        @SerializedName("signatures")
         var signatures: Map<String, Map<String, String>>? = null
 ) {
     /**
