@@ -3,6 +3,8 @@ package org.matrix.androidsdk.crypto.algorithms.olm;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
+import com.google.gson.JsonElement;
+
 import org.matrix.androidsdk.MXSession;
 import org.matrix.androidsdk.crypto.algorithms.OlmChannel;
 import org.matrix.androidsdk.crypto.data.MXDeviceInfo;
@@ -187,8 +189,14 @@ public class MXOlmChannel implements OlmChannel {
 
     public void onEventReceived(Event event) {
         boolean isSameUser = mSession.getMyUserId().equals(event.getSenderUserId());
+        JsonElement eventContent = event.getContent();
+        if (eventContent == null || eventContent.isJsonNull()) {
+            Log.w(LOG_TAG, "Event received has no payload");
+            return;
+        }
+
         if (listener != null && isSameUser) {
-            Map<String, Object> payload = JsonUtils.toMap(event.getContent());
+            Map<String, Object> payload = JsonUtils.toMap(eventContent);
             listener.onEventReceived(event.getSenderDeviceId(), event.getType(), payload);
         }
     }
