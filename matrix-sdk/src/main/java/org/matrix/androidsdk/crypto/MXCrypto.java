@@ -33,6 +33,8 @@ import org.matrix.androidsdk.MXDataHandler;
 import org.matrix.androidsdk.MXSession;
 import org.matrix.androidsdk.crypto.algorithms.IMXDecrypting;
 import org.matrix.androidsdk.crypto.algorithms.IMXEncrypting;
+import org.matrix.androidsdk.crypto.algorithms.OlmChannel;
+import org.matrix.androidsdk.crypto.algorithms.olm.MXOlmChannel;
 import org.matrix.androidsdk.crypto.data.ImportRoomKeysResult;
 import org.matrix.androidsdk.crypto.data.MXDeviceInfo;
 import org.matrix.androidsdk.crypto.data.MXEncryptEventContentResult;
@@ -171,6 +173,8 @@ public class MXCrypto {
         }
     };
 
+    private final MXOlmChannel olmChannel;
+
     // initialization callbacks
     private final List<ApiCallback<Void>> mInitializationCallbacks = new ArrayList();
 
@@ -288,6 +292,8 @@ public class MXCrypto {
         mReceivedRoomKeyRequests.addAll(mCryptoStore.getPendingIncomingRoomKeyRequests());
 
         mKeysBackup = new KeysBackup(this, mSession);
+
+        olmChannel = new MXOlmChannel(mSession);
     }
 
     /**
@@ -1563,6 +1569,13 @@ public class MXCrypto {
                     onRoomKeyRequestEvent(event);
                 }
             });
+        } else {
+            getEncryptingThreadHandler().post(new Runnable() {
+                @Override
+                public void run() {
+                    olmChannel.onEventReceived(event);
+                }
+            });
         }
     }
 
@@ -2750,6 +2763,10 @@ public class MXCrypto {
                 }
             });
         }
+    }
+
+    public OlmChannel getOlmChannel() {
+        return olmChannel;
     }
 
     /**

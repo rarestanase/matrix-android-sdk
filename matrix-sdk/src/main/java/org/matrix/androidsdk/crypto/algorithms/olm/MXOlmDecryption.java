@@ -163,6 +163,8 @@ public class MXOlmDecryption implements IMXDecrypting {
         result.mClearEvent = payload;
         result.mSenderCurve25519Key = deviceKey;
         result.mClaimedEd25519Key = olmPayloadContent.keys.get("ed25519");
+        result.mSenderUserId = olmPayloadContent.sender;
+        result.mSenderDeviceId = olmPayloadContent.sender_device;
 
         return result;
     }

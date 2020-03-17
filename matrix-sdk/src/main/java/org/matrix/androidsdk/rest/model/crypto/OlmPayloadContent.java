@@ -31,6 +31,8 @@ public class OlmPayloadContent implements java.io.Serializable {
      */
     public String sender;
 
+    public String sender_device;
+
     /**
      * The receipient
      */
