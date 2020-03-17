@@ -1208,6 +1208,9 @@ public class Event implements Externalizable {
      */
     private transient String mClaimedEd25519Key;
 
+    private transient String mSenderUserId;
+    private transient String mSenderDeviceId;
+
     /**
      * Curve25519 keys of devices involved in telling us about the senderCurve25519Key and claimedEd25519Key.
      * See `forwardingCurve25519KeyChain` property.
@@ -1244,6 +1247,8 @@ public class Event implements Externalizable {
             if (null != mClearEvent) {
                 mClearEvent.mSenderCurve25519Key = decryptionResult.mSenderCurve25519Key;
                 mClearEvent.mClaimedEd25519Key = decryptionResult.mClaimedEd25519Key;
+                mClearEvent.mSenderUserId = decryptionResult.mSenderUserId;
+                mClearEvent.mSenderDeviceId = decryptionResult.mSenderDeviceId;
 
                 if (null != decryptionResult.mForwardingCurve25519KeyChain) {
                     mClearEvent.mForwardingCurve25519KeyChain = decryptionResult.mForwardingCurve25519KeyChain;
@@ -1290,6 +1295,22 @@ public class Event implements Externalizable {
         }
 
         return res;
+    }
+
+    public String getSenderUserId() {
+        if (null != mClearEvent) {
+            return mClearEvent.mSenderUserId;
+        } else {
+            return mSenderUserId;
+        }
+    }
+
+    public String getSenderDeviceId() {
+        if (null != mClearEvent) {
+            return mClearEvent.mSenderDeviceId;
+        } else {
+            return mSenderDeviceId;
+        }
     }
 
     /**

@@ -49,4 +49,7 @@ public class MXEventDecryptionResult {
      * claimedEd25519Key. See MXEvent.forwardingCurve25519KeyChain.
      */
     public List<String> mForwardingCurve25519KeyChain = new ArrayList<>();
+
+    public String mSenderUserId;
+    public String mSenderDeviceId;
 }
