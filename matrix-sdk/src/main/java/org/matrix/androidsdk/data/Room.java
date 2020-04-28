@@ -1227,8 +1227,13 @@ public class Room {
 
                             for (String paramName : paramsDict.keySet()) {
                                 if (TextUtils.equals("ts", paramName)) {
-                                    Double value = (Double) paramsDict.get(paramName);
-                                    long ts = value.longValue();
+                                    Object value = paramsDict.get(paramName);
+                                    long ts;
+                                    if (value instanceof Long) {
+                                        ts = ((Long) value);
+                                    } else {
+                                        ts = ((Double) value).longValue();
+                                    }
 
                                     if (handleReceiptData(new ReceiptData(userID, eventId, ts))) {
                                         senderIDs.add(userID);
