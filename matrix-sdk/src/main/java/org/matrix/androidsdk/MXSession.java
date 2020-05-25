@@ -1405,7 +1405,14 @@ public class MXSession {
                     createdRoom.setOnInitialSyncCallback(new SimpleApiCallback<Void>(callback) {
                         @Override
                         public void onSuccess(Void info) {
-                            createdRoom.markAllAsRead(null);
+                            createdRoom.markAllAsRead(
+                                new SimpleApiCallback<Void>() {
+                                    @Override
+                                    public void onSuccess(Void info) {
+                                        // no-op
+                                    }
+                                }
+                            );
 
                             if (params.isDirect()) {
                                 finalizeDMRoomCreation(roomId, params.getFirstInvitedUserId(), callback);
