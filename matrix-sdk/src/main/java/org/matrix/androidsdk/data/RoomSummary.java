@@ -58,6 +58,7 @@ public class RoomSummary implements java.io.Serializable {
             Event.EVENT_TYPE_STATE_ROOM_CREATE,
             Event.EVENT_TYPE_STATE_HISTORY_VISIBILITY,
             Event.EVENT_TYPE_STATE_ROOM_THIRD_PARTY_INVITE,
+            Event.EVENT_TYPE_CITADEL_MEET,
             Event.EVENT_TYPE_STICKER);
 
     // List of known unsupported types
