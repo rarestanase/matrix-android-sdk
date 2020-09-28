@@ -99,6 +99,7 @@ public class Event implements Externalizable {
     public static final String EVENT_TYPE_ROOM_BOT_OPTIONS = "m.room.bot.options";
     public static final String EVENT_TYPE_ROOM_KEY_REQUEST = "m.room_key_request";
     public static final String EVENT_TYPE_FORWARDED_ROOM_KEY = "m.forwarded_room_key";
+    public static final String EVENT_TYPE_CITADEL_MEET = "citadel.meet";
 
     // Possible value for room account data type
     public static final String EVENT_TYPE_TAGS = "m.tag";
