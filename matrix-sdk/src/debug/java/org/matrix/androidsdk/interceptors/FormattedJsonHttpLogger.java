@@ -43,7 +43,7 @@ public class FormattedJsonHttpLogger implements HttpLoggingInterceptor.Logger {
         // In RELEASE there is no log, but for sure, test again BuildConfig.DEBUG
         if (BuildConfig.DEBUG) {
             // Keep default behavior from Platform.java
-            Platform.get().log(Platform.INFO, message, null);
+            Platform.get().log(message, Platform.INFO, null);
 
             if (message.startsWith("{")) {
                 // JSON Detected
@@ -71,7 +71,7 @@ public class FormattedJsonHttpLogger implements HttpLoggingInterceptor.Logger {
     private void logJson(String formattedJson) {
         String[] arr = formattedJson.split("\n");
         for (String s : arr) {
-            Platform.get().log(Platform.INFO, s, null);
+            Platform.get().log(s, Platform.INFO, null);
         }
     }
 }
